@@ -1,0 +1,391 @@
+{
+  "workspaces": [
+    {
+      "id": "ws-001",
+      "name": "Finance & Sales Analytics",
+      "datasets": [
+        {
+          "id": "ds-sales-01",
+          "name": "Sales_Analytics_Dataset",
+          "tables": [
+            {
+              "id": "tbl-fact-sales",
+              "name": "Fact_Sales",
+              "schema": "dbo",
+              "database": "Sales_Analytics_Dataset",
+              "type": "dataset_table",
+              "columns": [
+                {
+                  "id": "col-fs-order-id",
+                  "name": "order_id",
+                  "dataType": "Int64",
+                  "sourceColumn": "ABSCOSI_Extract.order_id",
+                  "sourceTableId": "tbl-src-sales",
+                  "sourceColumnId": "col-src-order-id",
+                  "transformationType": "Direct",
+                  "expression": "ABSCOSI_Extract[order_id]"
+                },
+                {
+                  "id": "col-fs-cust-id",
+                  "name": "cust_id",
+                  "dataType": "Int64",
+                  "sourceColumn": "ABSCOSI_Extract.cust_id",
+                  "sourceTableId": "tbl-src-sales",
+                  "sourceColumnId": "col-src-cust-id",
+                  "transformationType": "Direct",
+                  "expression": "ABSCOSI_Extract[cust_id]"
+                },
+                {
+                  "id": "col-fs-prod-id",
+                  "name": "product_id",
+                  "dataType": "Int64",
+                  "sourceColumn": "ABSCOSI_Extract.product_id",
+                  "sourceTableId": "tbl-src-sales",
+                  "sourceColumnId": "col-src-prod-id",
+                  "transformationType": "Direct",
+                  "expression": "ABSCOSI_Extract[product_id]"
+                },
+                {
+                  "id": "col-fs-net-amt",
+                  "name": "Net_Amount",
+                  "dataType": "Decimal",
+                  "sourceColumn": "ABSCOSI_Extract.sale_amt",
+                  "sourceTableId": "tbl-src-sales",
+                  "sourceColumnId": "col-src-sale-amt",
+                  "transformationType": "M_Expression",
+                  "expression": "Number.Round([sale_amt] * (1 - [discount]), 2)"
+                },
+                {
+                  "id": "col-fs-order-date",
+                  "name": "Order_Date",
+                  "dataType": "DateTime",
+                  "sourceColumn": "ABSCOSI_Extract.order_date",
+                  "sourceTableId": "tbl-src-sales",
+                  "sourceColumnId": "col-src-order-date",
+                  "transformationType": "Direct",
+                  "expression": "DateTime.From([order_date])"
+                },
+                {
+                  "id": "col-fs-sales-tax",
+                  "name": "Sales_Tax",
+                  "dataType": "Decimal",
+                  "isCalculated": true,
+                  "sourceColumn": "Fact_Sales.Net_Amount",
+                  "sourceTableId": "tbl-fact-sales",
+                  "sourceColumnId": "col-fs-net-amt",
+                  "transformationType": "DAX_Column",
+                  "expression": "Fact_Sales[Net_Amount] * 0.08"
+                },
+                {
+                  "id": "col-fs-gross-amt",
+                  "name": "Gross_Amount",
+                  "dataType": "Decimal",
+                  "isCalculated": true,
+                  "sourceColumn": "Fact_Sales.Net_Amount",
+                  "sourceTableId": "tbl-fact-sales",
+                  "sourceColumnId": "col-fs-net-amt",
+                  "transformationType": "DAX_Column",
+                  "expression": "Fact_Sales[Net_Amount] + Fact_Sales[Sales_Tax]"
+                }
+              ]
+            },
+            {
+              "id": "tbl-dim-customer",
+              "name": "Dim_Customer",
+              "schema": "dbo",
+              "database": "Sales_Analytics_Dataset",
+              "type": "dataset_table",
+              "columns": [
+                {
+                  "id": "col-dc-cust-id",
+                  "name": "Customer_ID",
+                  "dataType": "Int64",
+                  "sourceColumn": "Customer_Master.cust_id",
+                  "sourceTableId": "tbl-src-crm",
+                  "sourceColumnId": "col-crm-cust-id",
+                  "transformationType": "Direct",
+                  "expression": "Customer_Master[cust_id]"
+                },
+                {
+                  "id": "col-dc-cust-name",
+                  "name": "Customer_Name",
+                  "dataType": "String",
+                  "sourceColumn": "Customer_Master.cust_name",
+                  "sourceTableId": "tbl-src-crm",
+                  "sourceColumnId": "col-crm-cust-name",
+                  "transformationType": "Direct",
+                  "expression": "Text.Trim(Customer_Master[cust_name])"
+                },
+                {
+                  "id": "col-dc-email",
+                  "name": "Email_Address",
+                  "dataType": "String",
+                  "sourceColumn": "Customer_Master.email",
+                  "sourceTableId": "tbl-src-crm",
+                  "sourceColumnId": "col-crm-email",
+                  "transformationType": "Direct",
+                  "expression": "Text.Lower(Customer_Master[email])"
+                },
+                {
+                  "id": "col-dc-region",
+                  "name": "Region_Code",
+                  "dataType": "String",
+                  "sourceColumn": "Customer_Master.region",
+                  "sourceTableId": "tbl-src-crm",
+                  "sourceColumnId": "col-crm-region",
+                  "transformationType": "Direct",
+                  "expression": "Customer_Master[region]"
+                },
+                {
+                  "id": "col-dc-segment",
+                  "name": "Customer_Segment",
+                  "dataType": "String",
+                  "sourceColumn": "Customer_Master.segment",
+                  "sourceTableId": "tbl-src-crm",
+                  "sourceColumnId": "col-crm-segment",
+                  "transformationType": "M_Expression",
+                  "expression": "Text.Upper([segment])"
+                }
+              ]
+            },
+            {
+              "id": "tbl-dim-product",
+              "name": "Dim_Product",
+              "schema": "dbo",
+              "database": "Sales_Analytics_Dataset",
+              "type": "dataset_table",
+              "columns": [
+                {
+                  "id": "col-dp-prod-id",
+                  "name": "Product_ID",
+                  "dataType": "Int64",
+                  "sourceColumn": "Product_Dim.product_id",
+                  "sourceTableId": "tbl-src-cat",
+                  "sourceColumnId": "col-cat-prod-id",
+                  "transformationType": "Direct",
+                  "expression": "Product_Dim[product_id]"
+                },
+                {
+                  "id": "col-dp-prod-name",
+                  "name": "Product_Name",
+                  "dataType": "String",
+                  "sourceColumn": "Product_Dim.product_name",
+                  "sourceTableId": "tbl-src-cat",
+                  "sourceColumnId": "col-cat-prod-name",
+                  "transformationType": "Direct",
+                  "expression": "Product_Dim[product_name]"
+                },
+                {
+                  "id": "col-dp-cat-name",
+                  "name": "Category_Name",
+                  "dataType": "String",
+                  "sourceColumn": "Product_Dim.category",
+                  "sourceTableId": "tbl-src-cat",
+                  "sourceColumnId": "col-cat-category",
+                  "transformationType": "Direct",
+                  "expression": "Product_Dim[category]"
+                },
+                {
+                  "id": "col-dp-std-cost",
+                  "name": "Standard_Cost",
+                  "dataType": "Decimal",
+                  "sourceColumn": "Product_Dim.unit_cost",
+                  "sourceTableId": "tbl-src-cat",
+                  "sourceColumnId": "col-cat-unit-cost",
+                  "transformationType": "Direct",
+                  "expression": "Product_Dim[unit_cost]"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reports": [
+        {
+          "id": "rpt-sales-dash",
+          "name": "Executive_Sales_Dashboard",
+          "views": [
+            {
+              "id": "tbl-rpt-summary",
+              "name": "Regional_Sales_Summary",
+              "schema": "Report Visual",
+              "database": "Executive_Sales_Dashboard",
+              "type": "report",
+              "columns": [
+                {
+                  "id": "col-rpt-cust",
+                  "name": "Customer",
+                  "dataType": "String",
+                  "sourceColumn": "Dim_Customer.Customer_Name",
+                  "sourceTableId": "tbl-dim-customer",
+                  "sourceColumnId": "col-dc-cust-name",
+                  "transformationType": "Report_Binding",
+                  "expression": "SUMMARIZE('Dim_Customer'[Customer_Name])"
+                },
+                {
+                  "id": "col-rpt-segment",
+                  "name": "Segment",
+                  "dataType": "String",
+                  "sourceColumn": "Dim_Customer.Customer_Segment",
+                  "sourceTableId": "tbl-dim-customer",
+                  "sourceColumnId": "col-dc-segment",
+                  "transformationType": "Report_Binding",
+                  "expression": "SUMMARIZE('Dim_Customer'[Customer_Segment])"
+                },
+                {
+                  "id": "col-rpt-prod",
+                  "name": "Product",
+                  "dataType": "String",
+                  "sourceColumn": "Dim_Product.Product_Name",
+                  "sourceTableId": "tbl-dim-product",
+                  "sourceColumnId": "col-dp-prod-name",
+                  "transformationType": "Report_Binding",
+                  "expression": "SUMMARIZE('Dim_Product'[Product_Name])"
+                },
+                {
+                  "id": "col-rpt-revenue",
+                  "name": "Total_Revenue",
+                  "dataType": "Decimal",
+                  "sourceColumn": "Fact_Sales.Gross_Amount",
+                  "sourceTableId": "tbl-fact-sales",
+                  "sourceColumnId": "col-fs-gross-amt",
+                  "transformationType": "Report_Measure",
+                  "expression": "SUM('Fact_Sales'[Gross_Amount])"
+                },
+                {
+                  "id": "col-rpt-tax",
+                  "name": "Tax_Amount",
+                  "dataType": "Decimal",
+                  "sourceColumn": "Fact_Sales.Sales_Tax",
+                  "sourceTableId": "tbl-fact-sales",
+                  "sourceColumnId": "col-fs-sales-tax",
+                  "transformationType": "Report_Measure",
+                  "expression": "SUM('Fact_Sales'[Sales_Tax])"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sourceSystems": [
+        {
+          "id": "tbl-src-sales",
+          "name": "ABSCOSI_Extract",
+          "schema": "dbo",
+          "database": "SQL_Server.SalesDB",
+          "type": "source_table",
+          "columns": [
+            {
+              "id": "col-src-order-id",
+              "name": "order_id",
+              "dataType": "Int64",
+              "expression": "SQL_Server.SalesDB.ABSCOSI_Extract[order_id]"
+            },
+            {
+              "id": "col-src-cust-id",
+              "name": "cust_id",
+              "dataType": "Int64",
+              "expression": "SQL_Server.SalesDB.ABSCOSI_Extract[cust_id]"
+            },
+            {
+              "id": "col-src-prod-id",
+              "name": "product_id",
+              "dataType": "Int64",
+              "expression": "SQL_Server.SalesDB.ABSCOSI_Extract[product_id]"
+            },
+            {
+              "id": "col-src-sale-amt",
+              "name": "sale_amt",
+              "dataType": "Decimal",
+              "expression": "SQL_Server.SalesDB.ABSCOSI_Extract[sale_amt]"
+            },
+            {
+              "id": "col-src-discount",
+              "name": "discount",
+              "dataType": "Decimal",
+              "expression": "SQL_Server.SalesDB.ABSCOSI_Extract[discount]"
+            },
+            {
+              "id": "col-src-order-date",
+              "name": "order_date",
+              "dataType": "DateTime",
+              "expression": "SQL_Server.SalesDB.ABSCOSI_Extract[order_date]"
+            }
+          ]
+        },
+        {
+          "id": "tbl-src-crm",
+          "name": "Customer_Master",
+          "schema": "crm",
+          "database": "DataLake.CRM",
+          "type": "source_table",
+          "columns": [
+            {
+              "id": "col-crm-cust-id",
+              "name": "cust_id",
+              "dataType": "Int64",
+              "expression": "DataLake.CRM.Customer_Master[cust_id]"
+            },
+            {
+              "id": "col-crm-cust-name",
+              "name": "cust_name",
+              "dataType": "String",
+              "expression": "DataLake.CRM.Customer_Master[cust_name]"
+            },
+            {
+              "id": "col-crm-email",
+              "name": "email",
+              "dataType": "String",
+              "expression": "DataLake.CRM.Customer_Master[email]"
+            },
+            {
+              "id": "col-crm-region",
+              "name": "region",
+              "dataType": "String",
+              "expression": "DataLake.CRM.Customer_Master[region]"
+            },
+            {
+              "id": "col-crm-segment",
+              "name": "segment",
+              "dataType": "String",
+              "expression": "DataLake.CRM.Customer_Master[segment]"
+            }
+          ]
+        },
+        {
+          "id": "tbl-src-cat",
+          "name": "Product_Dim",
+          "schema": "catalog",
+          "database": "DataLake.Catalog",
+          "type": "source_table",
+          "columns": [
+            {
+              "id": "col-cat-prod-id",
+              "name": "product_id",
+              "dataType": "Int64",
+              "expression": "DataLake.Catalog.Product_Dim[product_id]"
+            },
+            {
+              "id": "col-cat-prod-name",
+              "name": "product_name",
+              "dataType": "String",
+              "expression": "DataLake.Catalog.Product_Dim[product_name]"
+            },
+            {
+              "id": "col-cat-category",
+              "name": "category",
+              "dataType": "String",
+              "expression": "DataLake.Catalog.Product_Dim[category]"
+            },
+            {
+              "id": "col-cat-unit-cost",
+              "name": "unit_cost",
+              "dataType": "Decimal",
+              "expression": "DataLake.Catalog.Product_Dim[unit_cost]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
