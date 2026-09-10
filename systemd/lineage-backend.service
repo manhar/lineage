@@ -1,0 +1,17 @@
+[Unit]
+Description=Power BI Column-Level Data Lineage - Backend API
+After=network.target
+
+[Service]
+Type=simple
+User=appuser
+Group=appuser
+WorkingDirectory=/opt/lineage_ui.service/backend
+ExecStart=/opt/lineage_ui.service/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+Environment="PATH=/opt/lineage_ui.service/backend/.venv/bin:/usr/local/bin:/usr/bin"
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
