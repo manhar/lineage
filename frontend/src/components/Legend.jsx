@@ -8,18 +8,18 @@ export default function Legend() {
     return (
       <button
         onClick={() => setIsCollapsed(false)}
-        className="absolute bottom-6 left-6 z-10 bg-slate-900/85 hover:bg-slate-800/90 backdrop-blur-md border border-slate-800/80 hover:border-slate-700 rounded-lg px-3 py-2 shadow-xl flex items-center gap-2 text-xs text-slate-300 font-medium transition-all group"
+        className="absolute top-6 left-6 z-10 bg-slate-900/85 hover:bg-slate-800/90 backdrop-blur-md border border-slate-800/80 hover:border-slate-700 rounded-lg px-3 py-2 shadow-xl flex items-center gap-2 text-xs text-slate-300 font-medium transition-all group"
         title="Expand Architecture Layers"
       >
         <Layers className="w-3.5 h-3.5 text-indigo-400" />
         <span>Architecture Layers</span>
-        <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition-transform" />
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition-transform" />
       </button>
     );
   }
 
   return (
-    <div className="absolute bottom-6 left-6 z-10 bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl p-3.5 shadow-2xl space-y-2.5 text-xs transition-all">
+    <div className="absolute top-6 left-6 z-10 bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl p-3.5 shadow-2xl space-y-2.5 text-xs transition-all">
       {/* Header with minimize button */}
       <div className="flex items-center justify-between gap-6 border-b border-slate-800/60 pb-1.5">
         <div className="flex items-center gap-1.5 font-semibold text-slate-300 text-[11px] uppercase tracking-wider">
@@ -31,7 +31,7 @@ export default function Legend() {
           className="p-1 hover:bg-slate-800 rounded-md text-slate-400 hover:text-slate-200 transition-colors"
           title="Minimize Architecture Layers"
         >
-          <ChevronDown className="w-3.5 h-3.5" />
+          <ChevronUp className="w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -62,4 +62,3 @@ export default function Legend() {
     </div>
   );
 }
-
