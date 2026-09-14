@@ -1,9 +1,11 @@
 import sqlite3
-from typing import List, Dict, Tuple, Set
+from datetime import datetime, timezone
+from typing import List, Dict, Tuple, Set, Optional, Any
 from .db import get_db, DB_PATH
 from .models import (
     EntityNode, ColumnAttribute, ColumnEdge, TableEdge, LineageGraphResponse,
-    LineageDetailsResponse, PathNode, ColumnContributor
+    LineageDetailsResponse, PathNode, ColumnContributor,
+    LineageExportSummary, LineageExportResponse
 )
 
 def get_lineage_graph_from_db(db_path: str = DB_PATH) -> LineageGraphResponse:
@@ -208,3 +210,145 @@ def get_column_details_from_db(node_id: str, column_id: str, db_path: str = DB_P
             upstreamPaths=up_paths,
             downstreamPaths=down_paths
         )
+
+def export_lineage_from_db(
+    node_id: Optional[str] = None,
+    column_id: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    system: Optional[str] = None,
+    scanner_source: Optional[str] = None,
+    scope: str = "all",
+    db_path: str = DB_PATH
+) -> LineageExportResponse:
+    """
+    Extracts the full lineage graph or a filtered subset from the SQLite database.
+    Supports subgraph tracing (upstream & downstream from a given node/column)
+    or attribute-based filtering (by entity type, system, scanner source).
+    """
+    full_graph = get_lineage_graph_from_db(db_path)
+
+    # 1. Handle Subgraph Scope (reachability search)
+    if scope == "subgraph" and (node_id or column_id):
+        # Determine starting column IDs
+        start_cols: Set[str] = set()
+        if column_id:
+            start_cols.add(column_id)
+        elif node_id:
+            for n in full_graph.nodes:
+                if n.id == node_id:
+                    for c in n.columns:
+                        start_cols.add(c.id)
+
+        # Build adjacency for upstream & downstream traversal
+        upstream_adj: Dict[str, List[ColumnEdge]] = {}
+        downstream_adj: Dict[str, List[ColumnEdge]] = {}
+        for edge in full_graph.columnEdges:
+            upstream_adj.setdefault(edge.targetColumnId, []).append(edge)
+            downstream_adj.setdefault(edge.sourceColumnId, []).append(edge)
+
+        reachable_cols: Set[str] = set(start_cols)
+        matched_edges: Set[str] = set()
+
+        # Upstream queue
+        q_up = list(start_cols)
+        while q_up:
+            curr = q_up.pop(0)
+            for edge in upstream_adj.get(curr, []):
+                matched_edges.add(edge.id)
+                if edge.sourceColumnId not in reachable_cols:
+                    reachable_cols.add(edge.sourceColumnId)
+                    q_up.append(edge.sourceColumnId)
+
+        # Downstream queue
+        q_down = list(start_cols)
+        while q_down:
+            curr = q_down.pop(0)
+            for edge in downstream_adj.get(curr, []):
+                matched_edges.add(edge.id)
+                if edge.targetColumnId not in reachable_cols:
+                    reachable_cols.add(edge.targetColumnId)
+                    q_down.append(edge.targetColumnId)
+
+        # Filter nodes that have reachable columns
+        filtered_nodes = []
+        for n in full_graph.nodes:
+            active_cols = [c for c in n.columns if c.id in reachable_cols]
+            if active_cols:
+                # Include node with its active columns
+                filtered_nodes.append(EntityNode(
+                    id=n.id,
+                    name=n.name,
+                    type=n.type,
+                    database=n.database,
+                    schema_name=n.schema_name,
+                    system=n.system,
+                    columns=active_cols
+                ))
+
+        filtered_edges = [e for e in full_graph.columnEdges if e.id in matched_edges]
+
+    else:
+        # Standard filter matching
+        filtered_nodes = full_graph.nodes
+
+        if node_id:
+            filtered_nodes = [n for n in filtered_nodes if n.id == node_id]
+
+        if entity_type:
+            filtered_nodes = [n for n in filtered_nodes if n.type.lower() == entity_type.lower()]
+
+        if system:
+            filtered_nodes = [n for n in filtered_nodes if (n.system or '').lower() == system.lower()]
+
+        retained_node_ids = {n.id for n in filtered_nodes}
+
+        # Filter edges
+        filtered_edges = full_graph.columnEdges
+        if scanner_source:
+            filtered_edges = [e for e in filtered_edges if (e.scannerSource or '').lower() == scanner_source.lower()]
+
+        if node_id or entity_type or system:
+            filtered_edges = [
+                e for e in filtered_edges
+                if e.sourceNodeId in retained_node_ids or e.targetNodeId in retained_node_ids
+            ]
+
+    # Compute Summary Statistics
+    tables_count = sum(1 for n in filtered_nodes if n.type in ("source_table", "dataset_table"))
+    views_count = sum(1 for n in filtered_nodes if n.type == "source_view")
+    reports_count = sum(1 for n in filtered_nodes if n.type == "report")
+    dataset_cols_count = sum(len(n.columns) for n in filtered_nodes)
+    multi_deriv_count = sum(
+        1 for n in filtered_nodes for c in n.columns if c.isMultiSource or (c.contributorCount and c.contributorCount > 1)
+    )
+
+    summary = LineageExportSummary(
+        totalNodes=len(filtered_nodes),
+        tables=tables_count,
+        views=views_count,
+        reports=reports_count,
+        datasetColumns=dataset_cols_count,
+        columnEdges=len(filtered_edges),
+        multiSourceDerivations=multi_deriv_count
+    )
+
+    metadata = {
+        "exportedAt": datetime.now(timezone.utc).isoformat(),
+        "schemaVersion": "2.1.0",
+        "scope": scope,
+        "filtersApplied": {
+            "nodeId": node_id,
+            "columnId": column_id,
+            "type": entity_type,
+            "system": system,
+            "scanner": scanner_source
+        }
+    }
+
+    return LineageExportResponse(
+        exportMetadata=metadata,
+        summary=summary,
+        nodes=filtered_nodes,
+        columnEdges=filtered_edges
+    )
+

@@ -1,0 +1,22 @@
+{
+  "scanner": "teradata",
+  "nodes": [
+    {
+      "name": "BROKEN_TABLE",
+      "type": "unrecognized_layer_type",
+      "columns": [
+        { "name": "", "dataType": "Int64" },
+        { "name": "valid_col_no_datatype" }
+      ]
+    },
+    {
+      "columns": []
+    }
+  ],
+  "edges": [
+    {
+      "sourceColumnId": "",
+      "targetColumnId": "teradata://td_prod/broken_table#valid_col_no_datatype"
+    }
+  ]
+}

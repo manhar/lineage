@@ -1,13 +1,17 @@
 import os
-from fastapi import FastAPI, HTTPException, Query
+import json
+from datetime import datetime, timezone
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .models import (
     LineageGraphResponse, LineageDetailsResponse,
-    TeradataIngestRequest, FabricIngestRequest, IngestResponse
+    TeradataIngestRequest, FabricIngestRequest, IngestResponse,
+    LineageExportResponse
 )
-from .parser import get_lineage_graph_from_db, get_column_details_from_db
+from .parser import get_lineage_graph_from_db, get_column_details_from_db, export_lineage_from_db
 from .ingestion import ingest_teradata_lineage, ingest_fabric_lineage
 from .db import DB_PATH
 from .seed_data import seed_lineage_database
@@ -57,6 +61,53 @@ def get_lineage_details(
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/export", response_model=LineageExportResponse)
+def export_lineage(
+    nodeId: Optional[str] = Query(None, description="Filter or root node ID for subgraph export"),
+    columnId: Optional[str] = Query(None, description="Filter or root column ID for subgraph export"),
+    type: Optional[str] = Query(None, description="Filter by entity type (source_table, source_view, dataset_table, report)"),
+    system: Optional[str] = Query(None, description="Filter by system (e.g. 'Teradata EDW', 'Fabric Semantic Layer')"),
+    scanner: Optional[str] = Query(None, description="Filter edges by scanner source (teradata_sql_scanner, fabric_scanner)"),
+    scope: str = Query("all", description="Export scope: 'all' (default) or 'subgraph' (traces connected paths)"),
+    download: bool = Query(False, description="Whether to trigger a browser file download")
+):
+    """
+    Extract a JSON snapshot of the entire lineage graph or a filtered subset.
+    Supports attribute-based filtering or upstream/downstream subgraph reachability extraction.
+    """
+    try:
+        export_data = export_lineage_from_db(
+            node_id=nodeId,
+            column_id=columnId,
+            entity_type=type,
+            system=system,
+            scanner_source=scanner,
+            scope=scope
+        )
+
+        if download:
+            now_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            filename = f"lineage_extract_{now_str}.json"
+            if hasattr(export_data, "model_dump_json"):
+                json_str = export_data.model_dump_json(indent=2)
+            elif hasattr(export_data, "json"):
+                json_str = export_data.json(indent=2)
+            else:
+                json_str = json.dumps(export_data.dict(), indent=2)
+
+            return Response(
+                content=json_str.encode("utf-8"),
+                media_type="application/json",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"'
+                }
+            )
+
+        return export_data
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export lineage: {str(e)}")
 
 # =============================================================================
 # Ingestion Endpoints (Teradata SQL Scanner & Azure Fabric / Power BI Scanner)

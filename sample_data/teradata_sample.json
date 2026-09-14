@@ -1,0 +1,144 @@
+{
+  "scanner": "teradata",
+  "server": "td_prod",
+  "defaultDatabase": "EDW_CORE",
+  "nodes": [
+    {
+      "name": "STG_SALES_TXN",
+      "container": "STG_SALES",
+      "schema_name": "Staging",
+      "type": "source_table",
+      "columns": [
+        { "name": "txn_id", "dataType": "Int64" },
+        { "name": "cust_nbr", "dataType": "Int64" },
+        { "name": "sale_amt", "dataType": "Decimal" },
+        { "name": "discount_amt", "dataType": "Decimal" },
+        { "name": "tax_rate", "dataType": "Decimal" },
+        { "name": "txn_dt", "dataType": "Date" }
+      ]
+    },
+    {
+      "name": "STG_CUST_MASTER",
+      "container": "STG_CRM",
+      "schema_name": "Staging",
+      "type": "source_table",
+      "columns": [
+        { "name": "cust_nbr", "dataType": "Int64" },
+        { "name": "first_name", "dataType": "String" },
+        { "name": "last_name", "dataType": "String" },
+        { "name": "credit_score", "dataType": "Int64" },
+        { "name": "state_code", "dataType": "String" }
+      ]
+    },
+    {
+      "name": "FACT_TRANSACTION_SUMMARY",
+      "container": "EDW_CORE",
+      "schema_name": "Core",
+      "type": "dataset_table",
+      "columns": [
+        { "name": "transaction_id", "dataType": "Int64", "isCalculated": false, "expression": "STG_SALES_TXN.txn_id" },
+        { "name": "customer_id", "dataType": "Int64", "isCalculated": false, "expression": "STG_SALES_TXN.cust_nbr" },
+        { 
+          "name": "net_paid_amount", 
+          "dataType": "Decimal", 
+          "isCalculated": true, 
+          "transformationType": "SQL_Multi_Derivation",
+          "expression": "ROUND((sale_amt - discount_amt) * (1.0 + tax_rate), 2)" 
+        },
+        { "name": "transaction_date", "dataType": "Date", "isCalculated": false, "expression": "STG_SALES_TXN.txn_dt" }
+      ]
+    },
+    {
+      "name": "DIM_CUSTOMER_ENRICHED",
+      "container": "EDW_CORE",
+      "schema_name": "Core",
+      "type": "dataset_table",
+      "columns": [
+        { "name": "customer_id", "dataType": "Int64", "isCalculated": false, "expression": "STG_CUST_MASTER.cust_nbr" },
+        { 
+          "name": "full_name", 
+          "dataType": "String", 
+          "isCalculated": true, 
+          "transformationType": "SQL_Multi_Derivation",
+          "expression": "TRIM(last_name) || ', ' || TRIM(first_name)" 
+        },
+        { 
+          "name": "risk_tier", 
+          "dataType": "String", 
+          "isCalculated": true, 
+          "transformationType": "SQL_Derivation",
+          "expression": "CASE WHEN credit_score >= 750 THEN 'Tier 1 - Prime' WHEN credit_score >= 650 THEN 'Tier 2 - Near Prime' ELSE 'Tier 3 - Subprime' END" 
+        },
+        { "name": "state_code", "dataType": "String", "isCalculated": false, "expression": "STG_CUST_MASTER.state_code" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "sourceColumnId": "teradata://td_prod/stg_sales/stg_sales_txn#txn_id",
+      "targetColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#transaction_id",
+      "transformationType": "Direct",
+      "expression": "STG_SALES_TXN.txn_id"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_sales/stg_sales_txn#cust_nbr",
+      "targetColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#customer_id",
+      "transformationType": "Direct",
+      "expression": "STG_SALES_TXN.cust_nbr"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_sales/stg_sales_txn#sale_amt",
+      "targetColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#net_paid_amount",
+      "transformationType": "SQL_Multi_Derivation",
+      "expression": "ROUND((sale_amt - discount_amt) * (1.0 + tax_rate), 2)"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_sales/stg_sales_txn#discount_amt",
+      "targetColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#net_paid_amount",
+      "transformationType": "SQL_Multi_Derivation",
+      "expression": "ROUND((sale_amt - discount_amt) * (1.0 + tax_rate), 2)"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_sales/stg_sales_txn#tax_rate",
+      "targetColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#net_paid_amount",
+      "transformationType": "SQL_Multi_Derivation",
+      "expression": "ROUND((sale_amt - discount_amt) * (1.0 + tax_rate), 2)"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_sales/stg_sales_txn#txn_dt",
+      "targetColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#transaction_date",
+      "transformationType": "Direct",
+      "expression": "STG_SALES_TXN.txn_dt"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_crm/stg_cust_master#cust_nbr",
+      "targetColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#customer_id",
+      "transformationType": "Direct",
+      "expression": "STG_CUST_MASTER.cust_nbr"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_crm/stg_cust_master#first_name",
+      "targetColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#full_name",
+      "transformationType": "SQL_Multi_Derivation",
+      "expression": "TRIM(last_name) || ', ' || TRIM(first_name)"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_crm/stg_cust_master#last_name",
+      "targetColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#full_name",
+      "transformationType": "SQL_Multi_Derivation",
+      "expression": "TRIM(last_name) || ', ' || TRIM(first_name)"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_crm/stg_cust_master#credit_score",
+      "targetColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#risk_tier",
+      "transformationType": "SQL_Derivation",
+      "expression": "CASE WHEN credit_score >= 750 THEN 'Tier 1 - Prime' ... END"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/stg_crm/stg_cust_master#state_code",
+      "targetColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#state_code",
+      "transformationType": "Direct",
+      "expression": "STG_CUST_MASTER.state_code"
+    }
+  ]
+}

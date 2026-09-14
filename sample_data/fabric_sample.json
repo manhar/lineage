@@ -1,0 +1,128 @@
+{
+  "scanner": "fabric",
+  "workspace": "Finance & Sales Analytics",
+  "nodes": [
+    {
+      "name": "Dim_Customer",
+      "container": "Finance & Sales Analytics",
+      "schema_name": "Model",
+      "type": "dataset_table",
+      "columns": [
+        { "name": "Customer_ID", "dataType": "Int64" },
+        { "name": "Full_Name", "dataType": "String" },
+        { "name": "Risk_Tier", "dataType": "String" },
+        { "name": "State_Code", "dataType": "String" }
+      ]
+    },
+    {
+      "name": "Fact_Sales",
+      "container": "Finance & Sales Analytics",
+      "schema_name": "Model",
+      "type": "dataset_table",
+      "columns": [
+        { "name": "Transaction_ID", "dataType": "Int64" },
+        { "name": "Customer_ID", "dataType": "Int64" },
+        { "name": "Net_Paid_Amount", "dataType": "Decimal" },
+        { 
+          "name": "Risk_Adjusted_Revenue", 
+          "dataType": "Decimal", 
+          "isCalculated": true, 
+          "transformationType": "DAX_Cross_Table",
+          "expression": "Fact_Sales[Net_Paid_Amount] * IF(RELATED(Dim_Customer[Risk_Tier]) = \"Tier 3 - Subprime\", 0.85, 1.0)" 
+        }
+      ]
+    },
+    {
+      "name": "Executive_KPI_Summary",
+      "container": "Executive Reporting",
+      "schema_name": "Visual",
+      "type": "report",
+      "columns": [
+        { "name": "Customer", "dataType": "String", "expression": "Dim_Customer[Full_Name]" },
+        { "name": "Risk_Profile", "dataType": "String", "expression": "Dim_Customer[Risk_Tier]" },
+        { "name": "Total_Revenue", "dataType": "Decimal", "expression": "SUM('Fact_Sales'[Net_Paid_Amount])" },
+        { "name": "Risk_Adjusted_Total", "dataType": "Decimal", "expression": "SUM('Fact_Sales'[Risk_Adjusted_Revenue])" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#customer_id",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/dim_customer#customer_id",
+      "transformationType": "Direct",
+      "expression": "DIM_CUSTOMER_ENRICHED[customer_id]"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#full_name",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/dim_customer#full_name",
+      "transformationType": "Direct",
+      "expression": "DIM_CUSTOMER_ENRICHED[full_name]"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#risk_tier",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/dim_customer#risk_tier",
+      "transformationType": "Direct",
+      "expression": "DIM_CUSTOMER_ENRICHED[risk_tier]"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/dim_customer_enriched#state_code",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/dim_customer#state_code",
+      "transformationType": "Direct",
+      "expression": "DIM_CUSTOMER_ENRICHED[state_code]"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#transaction_id",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/fact_sales#transaction_id",
+      "transformationType": "Direct",
+      "expression": "FACT_TRANSACTION_SUMMARY[transaction_id]"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#customer_id",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/fact_sales#customer_id",
+      "transformationType": "Direct",
+      "expression": "FACT_TRANSACTION_SUMMARY[customer_id]"
+    },
+    {
+      "sourceColumnId": "teradata://td_prod/edw_core/fact_transaction_summary#net_paid_amount",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/fact_sales#net_paid_amount",
+      "transformationType": "Direct",
+      "expression": "FACT_TRANSACTION_SUMMARY[net_paid_amount]"
+    },
+    {
+      "sourceColumnId": "fabric://ws_finance/sales_dataset/fact_sales#net_paid_amount",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/fact_sales#risk_adjusted_revenue",
+      "transformationType": "DAX_Cross_Table",
+      "expression": "Fact_Sales[Net_Paid_Amount] * IF(RELATED(Dim_Customer[Risk_Tier]) = \"Tier 3 - Subprime\", 0.85, 1.0)"
+    },
+    {
+      "sourceColumnId": "fabric://ws_finance/sales_dataset/dim_customer#risk_tier",
+      "targetColumnId": "fabric://ws_finance/sales_dataset/fact_sales#risk_adjusted_revenue",
+      "transformationType": "DAX_Cross_Table",
+      "expression": "Fact_Sales[Net_Paid_Amount] * IF(RELATED(Dim_Customer[Risk_Tier]) = \"Tier 3 - Subprime\", 0.85, 1.0)"
+    },
+    {
+      "sourceColumnId": "fabric://ws_finance/sales_dataset/dim_customer#full_name",
+      "targetColumnId": "fabric://ws_finance/exec_dashboard/executive_kpi_summary#customer",
+      "transformationType": "Report_Binding",
+      "expression": "Dim_Customer[Full_Name]"
+    },
+    {
+      "sourceColumnId": "fabric://ws_finance/sales_dataset/dim_customer#risk_tier",
+      "targetColumnId": "fabric://ws_finance/exec_dashboard/executive_kpi_summary#risk_profile",
+      "transformationType": "Report_Binding",
+      "expression": "Dim_Customer[Risk_Tier]"
+    },
+    {
+      "sourceColumnId": "fabric://ws_finance/sales_dataset/fact_sales#net_paid_amount",
+      "targetColumnId": "fabric://ws_finance/exec_dashboard/executive_kpi_summary#total_revenue",
+      "transformationType": "Report_Measure",
+      "expression": "SUM('Fact_Sales'[Net_Paid_Amount])"
+    },
+    {
+      "sourceColumnId": "fabric://ws_finance/sales_dataset/fact_sales#risk_adjusted_revenue",
+      "targetColumnId": "fabric://ws_finance/exec_dashboard/executive_kpi_summary#risk_adjusted_total",
+      "transformationType": "Report_Measure",
+      "expression": "SUM('Fact_Sales'[Risk_Adjusted_Revenue])"
+    }
+  ]
+}

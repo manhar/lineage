@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 class ColumnContributor(BaseModel):
@@ -119,3 +119,23 @@ class IngestResponse(BaseModel):
     columnsUpserted: int
     edgesUpserted: int
     message: str
+
+# =============================================================================
+# Lineage Export API Schemas
+# =============================================================================
+
+class LineageExportSummary(BaseModel):
+    totalNodes: int
+    tables: int
+    views: int
+    reports: int
+    datasetColumns: int
+    columnEdges: int
+    multiSourceDerivations: int
+
+class LineageExportResponse(BaseModel):
+    exportMetadata: Dict[str, Any]
+    summary: LineageExportSummary
+    nodes: List[EntityNode]
+    columnEdges: List[ColumnEdge]
+
