@@ -128,6 +128,32 @@ class LineageValidator:
             self.errors.append(ValidationError("ERROR", "'edges' field must be a list of edge objects."))
             return False
 
+        # Support PBI_scanner.py output where reports are stored in a top-level 'reports' array
+        raw_reports = self.data.get("reports", [])
+        if isinstance(raw_reports, list) and raw_reports:
+            existing_node_names = {n.get("name") for n in nodes if isinstance(n, dict)}
+            for r in raw_reports:
+                if isinstance(r, dict):
+                    r_name = r.get("name")
+                    if r_name and r_name not in existing_node_names:
+                        nodes.append({
+                            "id": r.get("urn"),
+                            "name": r_name,
+                            "container": self.data.get("workspace", "Reporting"),
+                            "schema_name": "Visual",
+                            "type": "report",
+                            "columns": [
+                                {
+                                    "name": "Report_View",
+                                    "dataType": "Visual",
+                                    "isCalculated": False,
+                                    "transformationType": "Report_Binding",
+                                    "expression": f"Web URL: {r.get('webUrl')}" if r.get("webUrl") else "Power BI Report"
+                                }
+                            ]
+                        })
+                        existing_node_names.add(r_name)
+
         # Auto-detect scanner type if auto
         explicit_scanner = (self.data.get("scanner") or self.data.get("scannerSource") or "").lower()
         if "teradata" in explicit_scanner:

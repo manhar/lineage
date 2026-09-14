@@ -928,8 +928,8 @@ def validate_canonical_payload(payload):
             errors.append(f"Node '{name}' has invalid 'container'.")
         if not isinstance(schema_name, str) or not schema_name.strip():
             errors.append(f"Node '{name}' has invalid 'schema_name'.")
-        if node_type != "dataset_table":
-            errors.append(f"Node '{name}' must have type 'dataset_table'.")
+        if node_type not in ("dataset_table", "report"):
+            errors.append(f"Node '{name}' must have type 'dataset_table' or 'report'.")
         if not isinstance(columns, list):
             errors.append(f"Node '{name}' has invalid 'columns'.")
             continue
@@ -944,9 +944,14 @@ def validate_canonical_payload(payload):
                 errors.append(f"Column #{column_index} in node '{name}' has invalid 'name'.")
                 continue
 
-            fabric_column_ids.add(
-                build_fabric_column_urn(workspace, container, name, column_name)
-            )
+            if node_type == "report":
+                fabric_column_ids.add(
+                    f"{build_fabric_report_urn(workspace, name)}#{normalize_urn_segment(column_name)}"
+                )
+            else:
+                fabric_column_ids.add(
+                    build_fabric_column_urn(workspace, container, name, column_name)
+                )
 
             if "isCalculated" in column and not isinstance(column.get("isCalculated"), bool):
                 errors.append(
@@ -1492,6 +1497,24 @@ def build_canonical_fabric_payload(nested_payload, dataset_tables):
     if report_id and report_name:
         report_urn = build_fabric_report_urn(workspace_name, report_name)
         dataset_urn = build_fabric_dataset_urn(workspace_name, dataset_name)
+
+        # Add report as a first-class visual node in canonical nodes
+        report_node = {
+            "name": report_name,
+            "container": normalize_urn_segment(workspace_name),
+            "schema_name": "Visual",
+            "type": "report",
+            "columns": [
+                {
+                    "name": "Report_View",
+                    "dataType": "Visual",
+                    "isCalculated": False,
+                    "transformationType": "Report_Binding",
+                    "expression": f"Dataset: {dataset_name}"
+                }
+            ],
+        }
+        nodes.append(report_node)
 
         reports.append(
             {
