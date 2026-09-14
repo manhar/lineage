@@ -1,6 +1,6 @@
-# Power BI Column-Level Data Lineage (100% Python Edition)
+# Power BI & Teradata Column-Level Data Lineage (100% Python Edition)
 
-A high-performance, column-level data lineage application for Power BI metadata scanner output, built for **enterprise and banking environments where Python is the ONLY permitted runtime** (No Docker, No Node.js required on the server).
+A high-performance, column-level data lineage application bridging **Teradata SQL** and **Azure Fabric / Power BI**, built for **enterprise and banking environments where Python is the ONLY permitted runtime** (No Docker, No Node.js required on the server).
 
 ---
 
@@ -59,6 +59,17 @@ Once launched, both the frontend UI and backend API run on a single unified port
 
 ---
 
+## 📥 Ingestion Endpoints (Teradata & Fabric)
+
+The backend provides automated ingestion APIs for your scanner pipelines:
+- **`POST /api/ingest/teradata`**: Ingests DDL, BTEQ scripts, views, and ELT multi-column derivations from Teradata SQL scanners.
+- **`POST /api/ingest/fabric`**: Ingests Power BI semantic models, DAX measures, visual bindings, and bridge edges connecting back to Teradata.
+- **`POST /api/reset`**: Resets the SQLite database to the verified sample dataset.
+
+For payload schemas, cURL examples, and Python scripts, refer to the full **[INGESTION_API.md](INGESTION_API.md)** documentation.
+
+---
+
 ## 🛠️ Architecture: How It Works Without Node.js
 
 ```
@@ -69,8 +80,9 @@ Once launched, both the frontend UI and backend API run on a single unified port
 │   │               FastAPI / Uvicorn Service             │   │
 │   │                   (Port 8000)                       │   │
 │   │                                                     │   │
-│   │  • /api/lineage  ──> [ Parser & Graph Engine ]      │   │
+│   │  • /api/lineage  ──> [ Parser & SQLite Engine ]     │   │
 │   │  • /api/details  ──> [ Path & Formula Engine ]      │   │
+│   │  • /api/ingest   ──> [ Multi-Scanner Ingestion ]    │   │
 │   │  • /             ──> [ Pre-Compiled Static UI ]     │   │
 │   │                      (React Flow + Dagre Canvas)    │   │
 │   └─────────────────────────────────────────────────────┘   │

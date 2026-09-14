@@ -75,3 +75,47 @@ class LineageDetailsResponse(BaseModel):
     directContributors: List[ColumnContributor] = []
     upstreamPaths: List[List[PathNode]]
     downstreamPaths: List[List[PathNode]]
+
+# =============================================================================
+# Ingestion API Schemas
+# =============================================================================
+
+class IngestColumnInput(BaseModel):
+    name: str
+    dataType: str
+    isCalculated: Optional[bool] = False
+    expression: Optional[str] = None
+    transformationType: Optional[str] = None
+
+class IngestNodeInput(BaseModel):
+    id: Optional[str] = None  # Optional explicit URN; auto-generated if omitted
+    name: str
+    container: str            # Database name (Teradata) or Dataset/Workspace name (Fabric)
+    schema_name: Optional[str] = "dbo"
+    type: Optional[str] = "dataset_table"  # source_table, dataset_table, report
+    columns: List[IngestColumnInput]
+
+class IngestEdgeInput(BaseModel):
+    sourceColumnId: str       # Full source column URN
+    targetColumnId: str       # Full target column URN
+    transformationType: Optional[str] = "Direct"  # Direct, SQL_Multi_Derivation, DAX, M_Query
+    expression: Optional[str] = None
+
+class TeradataIngestRequest(BaseModel):
+    server: Optional[str] = "td_prod"
+    defaultDatabase: Optional[str] = "EDW_CORE"
+    nodes: List[IngestNodeInput]
+    edges: List[IngestEdgeInput]
+
+class FabricIngestRequest(BaseModel):
+    workspace: Optional[str] = "Finance & Sales Analytics"
+    nodes: List[IngestNodeInput]
+    edges: List[IngestEdgeInput]
+
+class IngestResponse(BaseModel):
+    status: str
+    scannerSource: str
+    nodesUpserted: int
+    columnsUpserted: int
+    edgesUpserted: int
+    message: str
