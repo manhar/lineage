@@ -62,11 +62,13 @@ export default function TableNode({ data, id }) {
 
   return (
     <div className={`w-72 bg-slate-900/90 backdrop-blur-md rounded-xl border shadow-2xl transition-all duration-300 ${
-      data.isHighlighted 
-        ? 'border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/20' 
-        : data.isDimmed 
-          ? 'opacity-30 border-slate-800' 
-          : 'border-slate-800 hover:border-slate-700'
+      data.isFocused
+        ? 'border-emerald-400 ring-4 ring-emerald-500/60 shadow-emerald-500/30 scale-[1.03]'
+        : data.isHighlighted 
+          ? 'border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/20' 
+          : data.isDimmed 
+            ? 'opacity-30 border-slate-800' 
+            : 'border-slate-800 hover:border-slate-700'
     }`}>
       {/* Node Header */}
       <div className="p-3.5 border-b border-slate-800/80 bg-slate-950/50 rounded-t-xl">

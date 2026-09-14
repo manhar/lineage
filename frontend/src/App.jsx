@@ -12,6 +12,7 @@ export default function App() {
 
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedColumnId, setSelectedColumnId] = useState(null);
+  const [focusNodeId, setFocusNodeId] = useState(null);
   const [columnDetails, setColumnDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
@@ -37,17 +38,27 @@ export default function App() {
     fetchLineageGraph();
   }, [fetchLineageGraph]);
 
+  const handleSelectNode = useCallback((nodeId) => {
+    setFocusNodeId(nodeId);
+    setSelectedNodeId(nodeId);
+    // When focusing directly on a node/report from search, reset single column lineage selection
+    setSelectedColumnId(null);
+    setColumnDetails(null);
+  }, []);
+
   const handleSelectColumn = useCallback(async (nodeId, columnId) => {
     if (selectedColumnId === columnId) {
       // Toggle off if same column clicked again
       setSelectedNodeId(null);
       setSelectedColumnId(null);
+      setFocusNodeId(null);
       setColumnDetails(null);
       return;
     }
 
     setSelectedNodeId(nodeId);
     setSelectedColumnId(columnId);
+    setFocusNodeId(nodeId);
     setLoadingDetails(true);
 
     try {
@@ -65,6 +76,7 @@ export default function App() {
   const handleResetView = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedColumnId(null);
+    setFocusNodeId(null);
     setColumnDetails(null);
   }, []);
 
@@ -72,8 +84,11 @@ export default function App() {
     <div className="w-screen h-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none">
       {/* Top Header Toolbar */}
       <Header 
+        nodes={graphData?.nodes || []}
         summary={graphData?.summary} 
         activeTraceCount={selectedColumnId ? (columnDetails?.upstreamPaths?.length || 1) + (columnDetails?.downstreamPaths?.length || 0) : 0}
+        onSelectNode={handleSelectNode}
+        onSelectColumn={handleSelectColumn}
         onResetView={handleResetView}
         onRefresh={fetchLineageGraph}
       />
@@ -108,6 +123,7 @@ export default function App() {
               rawNodes={graphData?.nodes || []}
               rawColumnEdges={graphData?.columnEdges || []}
               selectedColumnId={selectedColumnId}
+              focusNodeId={focusNodeId}
               onSelectColumn={handleSelectColumn}
             />
 
