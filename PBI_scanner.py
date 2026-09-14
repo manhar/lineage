@@ -549,7 +549,8 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
     dataset_sources = map_dataset_sources(dataset, source_lookup)
     primary_source = dataset_sources[0] if dataset_sources else {"type": "unknown", "connection_details": {}}
 
-    nodes = []
+    source_nodes_map = {}
+    dataset_nodes = []
     edges = []
     seen_edges = set()
 
@@ -559,12 +560,13 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         if not table_name:
             continue
 
+        table_urn = build_fabric_table_urn(workspace_name, dataset_name, table_name)
         model_columns = extract_model_columns(raw_table)
         transformations = extract_table_transformations(raw_table)
         step_lookup = {t["step_name"]: t for t in transformations}
         col_lineage = build_column_lineage_for_table(model_columns, transformations)
         source_objects = extract_table_source_objects(raw_table)
-        primary_source_obj = source_objects[0]["object_name"] if source_objects else table_name
+        primary_source_obj = source_objects[-1]["object_name"] if source_objects else table_name
 
         table_cols = []
         for col in model_columns:
@@ -573,7 +575,9 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
                 continue
 
             expr = col.get("expression")
+            c_urn = build_fabric_column_urn(workspace_name, dataset_name, table_name, c_name)
             col_payload = {
+                "id": c_urn,
                 "name": c_name,
                 "dataType": col.get("data_type") or "String",
             }
@@ -586,7 +590,8 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
 
             table_cols.append(col_payload)
 
-        nodes.append({
+        dataset_nodes.append({
+            "id": table_urn,
             "name": table_name,
             "container": normalize_urn_segment(dataset_name),
             "schema_name": "Model",
@@ -594,7 +599,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
             "columns": table_cols,
         })
 
-        # 2. Build Ingest Edges from Source Objects
+        # 2. Build Ingest Edges from Source Objects & Record Upstream Source Nodes
         for mapping in col_lineage:
             src_col = mapping.get("source_column")
             tgt_col = mapping.get("model_column")
@@ -604,6 +609,31 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
             if src_col and tgt_col:
                 src_urn = build_source_column_urn(primary_source, primary_source_obj, src_col)
                 tgt_urn = build_fabric_column_urn(workspace_name, dataset_name, table_name, tgt_col)
+                src_node_urn = build_source_object_urn(primary_source, primary_source_obj)
+
+                # Register upstream source node and column so React Flow can render the edges
+                if src_node_urn not in source_nodes_map:
+                    s_schema, s_table = split_source_object_name(primary_source_obj)
+                    if not s_schema and len(source_objects) >= 2:
+                        s_schema = source_objects[-2]["object_name"]
+                    conn = primary_source.get("connection_details") or {}
+                    def_container = normalize_container_segment(conn.get("database") or conn.get("schema"), fallback="unknown_container")
+                    s_container = normalize_container_segment(s_schema, fallback=def_container)
+                    source_nodes_map[src_node_urn] = {
+                        "id": src_node_urn,
+                        "name": s_table or primary_source_obj,
+                        "container": s_container,
+                        "schema_name": s_schema or "dbo",
+                        "type": "source_table",
+                        "columns": {}
+                    }
+                if src_col not in source_nodes_map[src_node_urn]["columns"]:
+                    source_nodes_map[src_node_urn]["columns"][src_col] = {
+                        "id": src_urn,
+                        "name": src_col,
+                        "dataType": "String"
+                    }
+
                 edge_key = (src_urn, tgt_urn)
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
@@ -637,6 +667,19 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
                         "expression": expr
                     })
 
+    # Assemble nodes: upstream sources first, then dataset tables
+    nodes = []
+    for s_node in source_nodes_map.values():
+        nodes.append({
+            "id": s_node["id"],
+            "name": s_node["name"],
+            "container": s_node["container"],
+            "schema_name": s_node["schema_name"],
+            "type": s_node["type"],
+            "columns": list(s_node["columns"].values())
+        })
+    nodes.extend(dataset_nodes)
+
     # 4. Process Power BI Report Entity Node
     reports = []
     report_links = []
@@ -650,6 +693,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         # Build report visual columns bound to dataset tables
         report_cols = [
             {
+                "id": f"{report_urn}#report_view",
                 "name": "Report_View",
                 "dataType": "Visual",
                 "isCalculated": False,
@@ -659,6 +703,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         ]
 
         report_node = {
+            "id": report_urn,
             "name": report_name,
             "container": normalize_urn_segment(workspace_name),
             "schema_name": "Visual",
@@ -668,8 +713,8 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         nodes.append(report_node)
 
         # Bridge edge from first dataset table column into report visual
-        if nodes and nodes[0].get("columns"):
-            first_table = nodes[0]
+        if dataset_nodes and dataset_nodes[0].get("columns"):
+            first_table = dataset_nodes[0]
             first_col = first_table["columns"][0]["name"]
             src_col_urn = build_fabric_column_urn(workspace_name, dataset_name, first_table["name"], first_col)
             tgt_rep_urn = f"{report_urn}#report_view"
@@ -696,7 +741,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
             "relationship": "consumes_dataset",
         })
 
-    nodes.sort(key=lambda n: normalize_urn_segment(n.get("name")))
+    nodes.sort(key=lambda n: (0 if n.get("type") == "source_table" else (1 if n.get("type") == "dataset_table" else 2), normalize_urn_segment(n.get("name"))))
     edges.sort(key=lambda e: (e.get("sourceColumnId", ""), e.get("targetColumnId", "")))
 
     return {
@@ -748,16 +793,17 @@ def validate_canonical_payload(payload):
         if not isinstance(name, str) or not name.strip():
             errors.append(f"Node #{idx} has invalid 'name'.")
             continue
-        if name in node_names:
-            errors.append(f"Duplicate node name '{name}'.")
-        node_names.add(name)
+        node_key = node.get("id") or (node_type, name)
+        if node_key in node_names:
+            errors.append(f"Duplicate node '{name}'.")
+        node_names.add(node_key)
 
         if not isinstance(container, str) or not container.strip():
             errors.append(f"Node '{name}' has invalid 'container'.")
         if not isinstance(schema_name, str) or not schema_name.strip():
             errors.append(f"Node '{name}' has invalid 'schema_name'.")
-        if node_type not in ("dataset_table", "report"):
-            errors.append(f"Node '{name}' must have type 'dataset_table' or 'report'.")
+        if node_type not in ("dataset_table", "report", "source_table", "source_view"):
+            errors.append(f"Node '{name}' must have type 'dataset_table', 'report', 'source_table', or 'source_view'.")
 
         if not isinstance(columns, list):
             errors.append(f"Node '{name}' has invalid 'columns'.")
@@ -774,8 +820,10 @@ def validate_canonical_payload(payload):
 
             if node_type == "report":
                 fabric_column_ids.add(f"{build_fabric_report_urn(workspace, name)}#{normalize_urn_segment(c_name)}")
-            else:
+            elif node_type == "dataset_table":
                 fabric_column_ids.add(build_fabric_column_urn(workspace, container, name, c_name))
+            else:
+                fabric_column_ids.add(col.get("id") or f"{node.get('id')}#{normalize_urn_segment(c_name)}")
 
             if col.get("isCalculated") and not col.get("expression"):
                 errors.append(f"Calculated column '{name}.{c_name}' is missing 'expression'.")

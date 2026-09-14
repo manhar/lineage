@@ -222,9 +222,13 @@ class LineageValidator:
                 declared_col_urns.add(f"{n_name.lower()}#{c_name.strip().lower()}")
                 declared_col_urns.add(c_name.strip().lower())
 
-        # Validate edges
+        # Validate edges & synthesize missing upstream source nodes
+        existing_node_ids = {n.get("id") for n in nodes if n.get("id")}
+        existing_node_names = {n.get("name") for n in nodes if n.get("name")}
+        synth_nodes = {}
         edge_targets = {}
         valid_edges = []
+
         for e_idx, e in enumerate(edges):
             src = e.get("sourceColumnId")
             tgt = e.get("targetColumnId")
@@ -235,6 +239,35 @@ class LineageValidator:
             self.stats["columnEdges"] += 1
             edge_targets[tgt] = edge_targets.get(tgt, 0) + 1
             valid_edges.append(e)
+
+            # Auto-synthesize upstream source table if missing from nodes
+            src_node_urn = src.split("#")[0] if "#" in src else ""
+            src_col_name = src.split("#")[-1] if "#" in src else "col"
+            if src_node_urn and src_node_urn not in existing_node_ids:
+                if src_node_urn not in synth_nodes:
+                    parts = src_node_urn.replace("://", "/").split("/")
+                    s_name = parts[-1] if len(parts) > 1 else "source_table"
+                    s_cont = parts[-2] if len(parts) > 2 else "default"
+                    synth_nodes[src_node_urn] = {
+                        "id": src_node_urn,
+                        "name": s_name,
+                        "container": s_cont,
+                        "schema_name": "dbo",
+                        "type": "source_table",
+                        "columns": []
+                    }
+                if not any(c.get("name") == src_col_name for c in synth_nodes[src_node_urn]["columns"]):
+                    synth_nodes[src_node_urn]["columns"].append({
+                        "id": src,
+                        "name": src_col_name,
+                        "dataType": "String"
+                    })
+
+        for sn in synth_nodes.values():
+            nodes.append(sn)
+            existing_node_ids.add(sn["id"])
+            self.stats["tables"] += 1
+            self.stats["datasetColumns"] += len(sn["columns"])
 
         self.stats["multiDerivations"] = sum(1 for cnt in edge_targets.values() if cnt > 1)
 

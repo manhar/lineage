@@ -81,6 +81,7 @@ class LineageDetailsResponse(BaseModel):
 # =============================================================================
 
 class IngestColumnInput(BaseModel):
+    id: Optional[str] = None
     name: str
     dataType: str
     isCalculated: Optional[bool] = False

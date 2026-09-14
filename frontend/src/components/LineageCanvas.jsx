@@ -137,6 +137,26 @@ function CanvasInner({
     return { activeNodeIds: activeNodes, activeColumnIds: activeCols, activeEdgeIds: activeEdges };
   }, [selectedColumnId, rawNodes, rawColumnEdges]);
 
+  // Set of valid node IDs & resilient column handle lookup
+  const { validNodeIds, colLookup } = useMemo(() => {
+    const nodeIds = new Set(rawNodes.map(n => n.id));
+    const lookup = new Map();
+    rawNodes.forEach(n => {
+      (n.columns || []).forEach(c => {
+        lookup.set(c.id, c.id);
+        const colName = (c.name || '').toLowerCase();
+        lookup.set(`${n.id}#${colName}`, c.id);
+        lookup.set(`${n.id}#${colName.replace(/[^a-z0-9_]/g, '_')}`, c.id);
+      });
+    });
+    return { validNodeIds: nodeIds, colLookup: lookup };
+  }, [rawNodes]);
+
+  // Filter edges so Dagre and React Flow never encounter edges to non-existent nodes
+  const validColumnEdges = useMemo(() => {
+    return rawColumnEdges.filter(e => validNodeIds.has(e.sourceNodeId) && validNodeIds.has(e.targetNodeId));
+  }, [rawColumnEdges, validNodeIds]);
+
   // Convert raw API nodes & edges into React Flow format
   const initialNodes = useMemo(() => {
     const formatted = rawNodes.map((n) => {
@@ -160,14 +180,17 @@ function CanvasInner({
       };
     });
 
-    const formattedEdges = rawColumnEdges.map((e) => {
+    const formattedEdges = validColumnEdges.map((e) => {
       const isAct = activeEdgeIds.has(e.id);
+      const srcColId = colLookup.get(e.sourceColumnId) || e.sourceColumnId;
+      const tgtColId = colLookup.get(e.targetColumnId) || e.targetColumnId;
+
       return {
         id: e.id,
         source: e.sourceNodeId,
-        sourceHandle: `${e.sourceColumnId}-source`,
+        sourceHandle: `${srcColId}-source`,
         target: e.targetNodeId,
-        targetHandle: `${e.targetColumnId}-target`,
+        targetHandle: `${tgtColId}-target`,
         type: 'smoothstep',
         animated: isAct,
         className: selectedColumnId ? (isAct ? 'highlighted' : 'dimmed') : '',
@@ -179,7 +202,7 @@ function CanvasInner({
     });
 
     return getLayoutedElements(formatted, formattedEdges).nodes;
-  }, [rawNodes, rawColumnEdges, selectedColumnId, focusNodeId, onSelectColumn, activeNodeIds, activeColumnIds, activeEdgeIds]);
+  }, [rawNodes, validColumnEdges, selectedColumnId, focusNodeId, onSelectColumn, activeNodeIds, activeColumnIds, activeEdgeIds, colLookup]);
 
   const initialEdges = useMemo(() => {
     const formatted = rawNodes.map((n) => ({
@@ -189,14 +212,17 @@ function CanvasInner({
       position: { x: 0, y: 0 },
     }));
 
-    const formattedEdges = rawColumnEdges.map((e) => {
+    const formattedEdges = validColumnEdges.map((e) => {
       const isAct = activeEdgeIds.has(e.id);
+      const srcColId = colLookup.get(e.sourceColumnId) || e.sourceColumnId;
+      const tgtColId = colLookup.get(e.targetColumnId) || e.targetColumnId;
+
       return {
         id: e.id,
         source: e.sourceNodeId,
-        sourceHandle: `${e.sourceColumnId}-source`,
+        sourceHandle: `${srcColId}-source`,
         target: e.targetNodeId,
-        targetHandle: `${e.targetColumnId}-target`,
+        targetHandle: `${tgtColId}-target`,
         type: 'smoothstep',
         animated: isAct,
         className: selectedColumnId ? (isAct ? 'highlighted' : 'dimmed') : '',
@@ -208,7 +234,7 @@ function CanvasInner({
     });
 
     return getLayoutedElements(formatted, formattedEdges).edges;
-  }, [rawNodes, rawColumnEdges, selectedColumnId, activeEdgeIds]);
+  }, [rawNodes, validColumnEdges, selectedColumnId, activeEdgeIds, colLookup]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
