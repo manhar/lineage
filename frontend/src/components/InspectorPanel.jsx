@@ -10,7 +10,8 @@ import {
   Copy, 
   Check, 
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  GitMerge
 } from 'lucide-react';
 
 export default function InspectorPanel({ details, onClose, isLoading }) {
@@ -28,6 +29,7 @@ export default function InspectorPanel({ details, onClose, isLoading }) {
 
   const upstreamPaths = details?.upstreamPaths || [];
   const downstreamPaths = details?.downstreamPaths || [];
+  const contributors = details?.directContributors || [];
 
   return (
     <aside className="w-96 bg-slate-900/95 backdrop-blur-xl border-l border-slate-800 shadow-2xl flex flex-col h-full z-30 transition-all duration-300">
@@ -59,15 +61,15 @@ export default function InspectorPanel({ details, onClose, isLoading }) {
           <p className="text-xs font-medium">Fetching column lineage & transformation details...</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {/* Metadata Card */}
-          <div className="bg-slate-950/50 rounded-xl p-3.5 border border-slate-800 space-y-2.5 text-xs">
+          <div className="bg-slate-950/50 rounded-xl p-3.5 border border-slate-800 space-y-2 text-xs">
             <div className="flex justify-between items-center pb-2 border-b border-slate-800/60">
               <span className="text-slate-400">Table Name</span>
               <span className="font-semibold text-slate-200">{details.tableName}</span>
             </div>
             <div className="flex justify-between items-center pb-2 border-b border-slate-800/60">
-              <span className="text-slate-400">Database / Dataset</span>
+              <span className="text-slate-400">Database / Container</span>
               <span className="font-medium text-indigo-300">{details.databaseName}</span>
             </div>
             <div className="flex justify-between items-center">
@@ -77,6 +79,39 @@ export default function InspectorPanel({ details, onClose, isLoading }) {
               </span>
             </div>
           </div>
+
+          {/* Multi-Source Contributors Card (if derived from multiple columns) */}
+          {contributors.length > 1 && (
+            <div className="bg-amber-500/10 rounded-xl p-3.5 border border-amber-500/30 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                <GitMerge className="w-4 h-4 text-amber-400" />
+                <span>Multi-Source Derived Column ({contributors.length} Sources)</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                This metric is calculated by combining {contributors.length} source columns:
+              </p>
+              <div className="space-y-1.5">
+                {contributors.map((c, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-850 text-xs">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="font-semibold text-slate-100 truncate" title={c.columnName}>
+                        {c.columnName}
+                      </span>
+                      <span className="text-[10px] text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded truncate">
+                        {c.tableName}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-cyan-300">
+                      {c.dataType}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Transformation Formula Block */}
           <div className="space-y-2">
@@ -96,8 +131,8 @@ export default function InspectorPanel({ details, onClose, isLoading }) {
               )}
             </div>
 
-            <div className="bg-slate-950 rounded-xl p-3.5 border border-slate-800/80 relative font-mono text-xs text-indigo-200 overflow-x-auto">
-              <code>{details.expression || '-- Direct mapping without custom calculation'}</code>
+            <div className="bg-slate-950 rounded-xl p-3.5 border border-slate-800/80 relative font-mono text-xs text-indigo-200 overflow-x-auto leading-relaxed">
+              <code>{details.expression || '-- Direct mapping without calculation'}</code>
             </div>
           </div>
 

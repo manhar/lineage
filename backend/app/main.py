@@ -1,12 +1,21 @@
+import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
 from .models import LineageGraphResponse, LineageDetailsResponse
-from .parser import load_scanner_json, parse_lineage_graph, get_column_details
+from .parser import get_lineage_graph_from_db, get_column_details_from_db
+from .db import DB_PATH
+from .seed_data import seed_lineage_database
+
+# Automatically initialize & seed database if not present
+if not os.path.exists(DB_PATH):
+    seed_lineage_database(DB_PATH)
 
 app = FastAPI(
-    title="Power BI Column-Level Data Lineage Service",
-    version="1.0.0",
-    description="Backend service providing metadata graph parsing and column lineage API."
+    title="Power BI & Teradata Column-Level Data Lineage Service",
+    version="2.0.0",
+    description="Backend service providing canonical SQLite metadata graph and column lineage API."
 )
 
 app.add_middleware(
@@ -19,14 +28,17 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "service": "lineage_ui_backend"}
+    return {
+        "status": "ok", 
+        "service": "lineage_ui_backend",
+        "database": "sqlite",
+        "engine": "canonical_urn_graph"
+    }
 
 @app.get("/api/lineage", response_model=LineageGraphResponse)
 def get_lineage_graph():
     try:
-        raw_data = load_scanner_json()
-        graph = parse_lineage_graph(raw_data)
-        return graph
+        return get_lineage_graph_from_db()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -36,19 +48,13 @@ def get_lineage_details(
     columnId: str = Query(..., description="ID of the selected column")
 ):
     try:
-        raw_data = load_scanner_json()
-        graph = parse_lineage_graph(raw_data)
-        details = get_column_details(nodeId, columnId, graph)
-        return details
+        return get_column_details_from_db(nodeId, columnId)
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Mount pre-compiled frontend static assets (Single-Port Python Deployment)
-import os
-from fastapi.staticfiles import StaticFiles
-
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

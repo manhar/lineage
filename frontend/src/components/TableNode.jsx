@@ -10,6 +10,7 @@ import {
   Calendar, 
   CheckCircle2, 
   Sparkles,
+  GitMerge,
   Layers
 } from 'lucide-react';
 
@@ -138,15 +139,23 @@ export default function TableNode({ data, id }) {
                 />
 
                 {/* Column details */}
-                <div className="flex items-center gap-2 overflow-hidden">
+                <div className="flex items-center gap-1.5 overflow-hidden">
                   <div className="p-1 rounded bg-slate-800/80 group-hover:bg-slate-700/80 transition-colors">
                     {getDataTypeIcon(col.dataType)}
                   </div>
                   <span className="truncate" title={col.name}>
                     {col.name}
                   </span>
-                  {col.isCalculated && (
-                    <Sparkles className="w-3 h-3 text-amber-400 shrink-0" title="Calculated Column (DAX/M)" />
+                  {col.isMultiSource ? (
+                    <span 
+                      className="text-[9px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1 py-0.2 rounded flex items-center gap-0.5 shrink-0" 
+                      title={`Derived from ${col.contributorCount} source columns`}
+                    >
+                      <GitMerge className="w-2.5 h-2.5" />
+                      {col.contributorCount}
+                    </span>
+                  ) : col.isCalculated && (
+                    <Sparkles className="w-3 h-3 text-amber-400 shrink-0" title="Calculated Column (SQL/DAX/M)" />
                   )}
                 </div>
 
