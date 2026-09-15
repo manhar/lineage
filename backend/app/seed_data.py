@@ -1,15 +1,10 @@
-from .db import get_db, init_db, DB_PATH
+from .db import get_db, init_db, clear_db, DB_PATH
 
 def seed_lineage_database(db_path: str = DB_PATH):
-    init_db(db_path)
+    clear_db(db_path)
 
     with get_db(db_path) as conn:
         cursor = conn.cursor()
-
-        # Clear existing data
-        cursor.execute("DELETE FROM column_edges;")
-        cursor.execute("DELETE FROM columns;")
-        cursor.execute("DELETE FROM nodes;")
 
         # =====================================================================
         # 1. NODES

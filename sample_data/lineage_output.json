@@ -1,0 +1,115 @@
+{
+  "workspace": "IBFS dza_m_finance [PROD]",
+  "nodes": [
+    {
+      "id": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm",
+      "name": "ibfs_DZA_rep_profit_vm",
+      "container": "masked_host_local",
+      "schema_name": "masked.host.local",
+      "type": "source_table",
+      "columns": [
+        {
+          "id": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm#prompt_date_valid",
+          "name": "Prompt_Date_Valid",
+          "dataType": "String"
+        },
+        {
+          "id": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm#date_d_arr_t",
+          "name": "Date d'Arr\u00eat\u00e9",
+          "dataType": "String"
+        },
+        {
+          "id": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm#date_time_valid",
+          "name": "Date Time Valid",
+          "dataType": "String"
+        }
+      ]
+    },
+    {
+      "id": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date",
+      "name": "Date",
+      "container": "profitabilityfr",
+      "schema_name": "Model",
+      "type": "dataset_table",
+      "columns": [
+        {
+          "id": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date_d_arr_t",
+          "name": "Date d'Arr\u00eat\u00e9",
+          "dataType": "DateTime"
+        },
+        {
+          "id": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date",
+          "name": "Date",
+          "dataType": "String"
+        },
+        {
+          "id": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date_time_valid",
+          "name": "Date Time Valid",
+          "dataType": "String"
+        }
+      ]
+    },
+    {
+      "id": "fabric://ibfs_dza_m_finance_prod/reports/profitabilityfr",
+      "name": "ProfitabilityFR",
+      "container": "ibfs_dza_m_finance_prod",
+      "schema_name": "Visual",
+      "type": "report",
+      "columns": [
+        {
+          "id": "fabric://ibfs_dza_m_finance_prod/reports/profitabilityfr#report_view",
+          "name": "Report_View",
+          "dataType": "Visual",
+          "isCalculated": false,
+          "transformationType": "Report_Binding",
+          "expression": "Dataset: ProfitabilityFR"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "sourceColumnId": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date_d_arr_t",
+      "targetColumnId": "fabric://ibfs_dza_m_finance_prod/reports/profitabilityfr#report_view",
+      "transformationType": "Report_Binding",
+      "expression": "Visual Binding: ProfitabilityFR"
+    },
+    {
+      "sourceColumnId": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm#date_d_arr_t",
+      "targetColumnId": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date_d_arr_t",
+      "transformationType": "Direct",
+      "expression": "ibfs_DZA_rep_profit_vm[Date d'Arr\u00eat\u00e9]"
+    },
+    {
+      "sourceColumnId": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm#date_time_valid",
+      "targetColumnId": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date_time_valid",
+      "transformationType": "Direct",
+      "expression": "ibfs_DZA_rep_profit_vm[Date Time Valid]"
+    },
+    {
+      "sourceColumnId": "xxxxxxxxxx724f6b5c01://masked_host_local/unknown_container/ibfs_dza_rep_profit_vm#prompt_date_valid",
+      "targetColumnId": "fabric://ibfs_dza_m_finance_prod/profitabilityfr/date#date",
+      "transformationType": "PowerQuery_Rename",
+      "expression": "267] ... }, {\"Prompt_Date_Valid\", \"Date\"}})"
+    }
+  ],
+  "reports": [
+    {
+      "id": "UUID_MASKED",
+      "name": "ProfitabilityFR",
+      "urn": "fabric://ibfs_dza_m_finance_prod/reports/profitabilityfr",
+      "datasetId": "xxxxxxxxxx_85f899d092",
+      "datasetUrn": "fabric://ibfs_dza_m_finance_prod/datasets/profitabilityfr",
+      "webUrl": null
+    }
+  ],
+  "reportLinks": [
+    {
+      "reportId": "UUID_MASKED",
+      "reportUrn": "fabric://ibfs_dza_m_finance_prod/reports/profitabilityfr",
+      "datasetId": "xxxxxxxxxx_85f899d092",
+      "datasetUrn": "fabric://ibfs_dza_m_finance_prod/datasets/profitabilityfr",
+      "relationship": "consumes_dataset"
+    }
+  ]
+}

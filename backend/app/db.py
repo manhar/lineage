@@ -60,6 +60,23 @@ def init_db(db_path: str = DB_PATH):
 
         conn.commit()
 
+def clear_db(db_path: str = DB_PATH):
+    """
+    Clears all entities, columns, and lineage edges from the database,
+    leaving clean, empty tables.
+    """
+    init_db(db_path)
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM column_edges;")
+        cursor.execute("DELETE FROM columns;")
+        cursor.execute("DELETE FROM nodes;")
+        conn.commit()
+        try:
+            cursor.execute("VACUUM;")
+        except Exception:
+            pass
+
 @contextmanager
 def get_db(db_path: str = DB_PATH):
     conn = sqlite3.connect(db_path)

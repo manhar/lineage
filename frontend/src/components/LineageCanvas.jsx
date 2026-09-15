@@ -11,7 +11,7 @@ import {
   useReactFlow
 } from '@xyflow/react';
 import dagre from 'dagre';
-import { Compass } from 'lucide-react';
+import { Compass, Database } from 'lucide-react';
 import TableNode from './TableNode';
 
 const nodeTypes = {
@@ -259,6 +259,20 @@ function CanvasInner({
 
   return (
     <div className="w-full h-full relative bg-slate-950">
+      {rawNodes.length === 0 && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 p-6">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-8 max-w-md text-center shadow-2xl backdrop-blur-md">
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-4">
+              <Database className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-100 mb-1.5">Database is Empty</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              No lineage nodes or edges are currently loaded. Use <code className="px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono text-[11px]">load_lineage.py</code> or the ingestion API to load your metadata graph.
+            </p>
+          </div>
+        </div>
+      )}
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -275,30 +289,34 @@ function CanvasInner({
         <Controls position="bottom-right" />
 
         {/* Eagle View (MiniMap) Badge & Interactive Viewfinder */}
-        <div className="absolute bottom-[170px] left-6 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-800 text-[11px] font-semibold text-slate-300 shadow-lg pointer-events-none">
-          <Compass className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Eagle View Navigator</span>
-          <span className="text-[10px] text-slate-500 font-normal">(Drag or click to move)</span>
-        </div>
+        {rawNodes.length > 0 && (
+          <>
+            <div className="absolute bottom-[170px] left-6 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-800 text-[11px] font-semibold text-slate-300 shadow-lg pointer-events-none">
+              <Compass className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Eagle View Navigator</span>
+              <span className="text-[10px] text-slate-500 font-normal">(Drag or click to move)</span>
+            </div>
 
-        <MiniMap 
-          nodeColor={(node) => {
-            if (node.data?.isFocused) return '#10b981';
-            switch (node.data?.type) {
-              case 'source_table': return '#fbbf24';
-              case 'dataset_table': return '#818cf8';
-              case 'report': return '#34d399';
-              default: return '#64748b';
-            }
-          }}
-          maskColor="rgba(15, 23, 42, 0.75)"
-          position="bottom-left"
-          pannable={true}
-          zoomable={true}
-          nodeStrokeWidth={3}
-          nodeBorderRadius={4}
-          className="!w-64 !h-36 !rounded-xl !border !border-slate-800/90 !shadow-2xl !bg-slate-950/90 backdrop-blur-md cursor-grab active:cursor-grabbing hover:!border-indigo-500/50 transition-all"
-        />
+            <MiniMap 
+              nodeColor={(node) => {
+                if (node.data?.isFocused) return '#10b981';
+                switch (node.data?.type) {
+                  case 'source_table': return '#fbbf24';
+                  case 'dataset_table': return '#818cf8';
+                  case 'report': return '#34d399';
+                  default: return '#64748b';
+                }
+              }}
+              maskColor="rgba(15, 23, 42, 0.75)"
+              position="bottom-left"
+              pannable={true}
+              zoomable={true}
+              nodeStrokeWidth={3}
+              nodeBorderRadius={4}
+              className="!w-64 !h-36 !rounded-xl !border !border-slate-800/90 !shadow-2xl !bg-slate-950/90 backdrop-blur-md cursor-grab active:cursor-grabbing hover:!border-indigo-500/50 transition-all"
+            />
+          </>
+        )}
       </ReactFlow>
     </div>
   );

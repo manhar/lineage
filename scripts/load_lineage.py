@@ -447,7 +447,7 @@ Examples:
     parser.add_argument(
         "--reset-first",
         action="store_true",
-        help="Reset and re-seed the backend database before loading this file"
+        help="Clear all existing lineage data from the backend database before loading this file"
     )
 
     args = parser.parse_args()

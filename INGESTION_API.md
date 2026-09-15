@@ -282,9 +282,10 @@ curl -X POST http://localhost:8000/api/ingest/fabric \
 
 ---
 
-## 4. Resetting to Sample Data
+## 4. Resetting & Clearing the Database
 
-To reset and re-seed the SQLite database back to the verified sample dataset at any time:
+### Complete Purge (Zero Nodes, Zero Edges)
+To clear all entities, columns, and lineage edges completely (even sample lineage):
 
 ```bash
 curl -X POST http://localhost:8000/api/reset
@@ -294,7 +295,22 @@ Response:
 ```json
 {
   "status": "ok",
-  "message": "Lineage database successfully reset to sample data."
+  "message": "Lineage database successfully cleared (0 nodes, 0 edges)."
+}
+```
+
+### Re-seeding Sample Lineage
+To reset and re-seed the SQLite database back to the default sample dataset:
+
+```bash
+curl -X POST "http://localhost:8000/api/reset?seed_sample=true"
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "message": "Lineage database successfully reset and re-seeded with sample data."
 }
 ```
 

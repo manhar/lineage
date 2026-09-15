@@ -2,7 +2,7 @@ import os
 import json
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -13,7 +13,7 @@ from .models import (
 )
 from .parser import get_lineage_graph_from_db, get_column_details_from_db, export_lineage_from_db
 from .ingestion import ingest_teradata_lineage, ingest_fabric_lineage
-from .db import DB_PATH
+from .db import DB_PATH, clear_db
 from .seed_data import seed_lineage_database
 
 # Automatically initialize & seed database if not present
@@ -136,13 +136,36 @@ def ingest_fabric(payload: FabricIngestRequest):
         raise HTTPException(status_code=500, detail=f"Fabric ingestion failed: {str(e)}")
 
 @app.post("/api/reset")
-def reset_database():
+async def reset_database(request: Request, seed_sample: Optional[bool] = Query(None)):
     """
-    Reset and re-seed the SQLite lineage database with the default sample data.
+    Clear all lineage data from the SQLite database (nodes, columns, edges).
+    Pass ?seed_sample=true or {"seed_sample": true} to repopulate with default sample lineage.
     """
+    should_seed = False
+    if seed_sample is not None:
+        should_seed = seed_sample
+    else:
+        # Check if JSON body contains seed_sample
+        try:
+            body = await request.json()
+            if isinstance(body, dict) and "seed_sample" in body:
+                should_seed = bool(body["seed_sample"])
+        except Exception:
+            pass
+
     try:
-        seed_lineage_database(DB_PATH)
-        return {"status": "ok", "message": "Lineage database successfully reset to sample data."}
+        if should_seed:
+            seed_lineage_database(DB_PATH)
+            return {
+                "status": "ok",
+                "message": "Lineage database successfully reset and re-seeded with sample data."
+            }
+        else:
+            clear_db(DB_PATH)
+            return {
+                "status": "ok",
+                "message": "Lineage database successfully cleared (0 nodes, 0 edges)."
+            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

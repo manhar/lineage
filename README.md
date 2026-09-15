@@ -64,7 +64,7 @@ Once launched, both the frontend UI and backend API run on a single unified port
 The backend provides automated ingestion APIs for your scanner pipelines:
 - **`POST /api/ingest/teradata`**: Ingests DDL, BTEQ scripts, views, and ELT multi-column derivations from Teradata SQL scanners.
 - **`POST /api/ingest/fabric`**: Ingests Power BI semantic models, DAX measures, visual bindings, and bridge edges connecting back to Teradata.
-- **`POST /api/reset`**: Resets the SQLite database to the verified sample dataset.
+- **`POST /api/reset`**: Clears all data from the database (optional `?seed_sample=true` to repopulate default sample data).
 
 For payload schemas, cURL examples, and Python scripts, refer to the full **[INGESTION_API.md](INGESTION_API.md)** documentation.
 
