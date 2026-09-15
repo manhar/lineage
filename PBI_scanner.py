@@ -57,8 +57,10 @@ RENAME_PATTERN = re.compile(r'\{"([^"]+)",\s*"([^"]+)"\}')
 ADD_COL_PATTERN = re.compile(r'Table\.AddColumn\([^,]+,\s*"([^"]+)"\s*,\s*each\s*(.+)\)$')
 COL_REF_PATTERN = re.compile(r'\[([^\]]+)\]')
 SCHEMA_ITEM_PATTERN = re.compile(r'Schema\s*=\s*"([^"]+)"\s*,\s*Item\s*=\s*"([^"]+)"', re.IGNORECASE)
+SCHEMA_REF_PATTERN = re.compile(r'\[\s*Schema\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\]', re.IGNORECASE)
 NAME_MATCH_PATTERN = re.compile(r'\[Name\s*=\s*"([^"]+)"\]', re.IGNORECASE)
 FROM_MATCH_PATTERN = re.compile(r'\bfrom\s+([\[\]\w\."]+)', re.IGNORECASE)
+PBI_VARIABLE_PATTERN = re.compile(r'\bp_[A-Za-z0-9_]+\b', re.IGNORECASE)
 
 POWER_QUERY_MARKERS = (
     "let\n", "let\r\n", "table.", "text.", "number.", "datetime.", "date.",
@@ -232,7 +234,11 @@ def build_runtime_variables(cli_vars=None, p_entity=None, p_environment=None):
         if "=" in raw:
             k, _, v = raw.partition("=")
             if k.strip():
-                vars_dict[k.strip().lower()] = v.strip()
+                key = k.strip().lower()
+                # Accept common plural typo while preserving backwards compatibility.
+                if key == "p_environments":
+                    key = "p_environment"
+                vars_dict[key] = v.strip()
     if p_entity:
         vars_dict["p_entity"] = p_entity.strip()
     if p_environment:
@@ -272,6 +278,120 @@ def apply_runtime_variables_to_dataset(dataset, runtime_variables):
                 col["expression"] = substitute_runtime_variables(col["expression"], runtime_variables)
 
     return dataset_copy
+
+
+def merge_runtime_variables_with_dataset_defaults(runtime_variables, dataset):
+    """
+    Enrich runtime variables with dataset parameter defaults when not supplied.
+    """
+    merged = dict(runtime_variables or {})
+    defaults = extract_dataset_parameter_defaults(dataset)
+    for key, default_val in defaults.items():
+        if key not in merged and default_val is not None and str(default_val).strip():
+            merged[key] = str(default_val).strip()
+    return merged
+
+
+def extract_powerbi_runtime_variables(dataset):
+    """
+    Returns Power BI runtime-like variables referenced in model expressions,
+    grouped by variable name with the set of contexts where each appears.
+    """
+    usage = {}
+
+    def register(var_name, context):
+        key = str(var_name or "").strip().lower()
+        if not key.startswith("p_"):
+            return
+        usage.setdefault(key, set()).add(context)
+
+    for table in safe_list(dataset.get("tables")):
+        table_name = table.get("name") or "unknown_table"
+
+        for source in safe_list(table.get("source")):
+            expression = source.get("expression") or ""
+            for var_name in PBI_VARIABLE_PATTERN.findall(expression):
+                register(var_name, f"table:{table_name}:source")
+
+        for col in safe_list(table.get("columns")):
+            expression = col.get("expression") or ""
+            if not expression:
+                continue
+            col_name = col.get("name") or "unknown_column"
+            for var_name in PBI_VARIABLE_PATTERN.findall(expression):
+                register(var_name, f"table:{table_name}:column:{col_name}")
+
+    for expr in safe_list(dataset.get("expressions")):
+        expr_name = expr.get("name") or "unknown_expression"
+        expression = expr.get("expression") or ""
+
+        if str(expr_name).lower().startswith("p_"):
+            register(expr_name, f"dataset_expression:{expr_name}")
+
+        for var_name in PBI_VARIABLE_PATTERN.findall(expression):
+            register(var_name, f"dataset_expression:{expr_name}")
+
+    return usage
+
+
+def extract_dataset_parameter_defaults(dataset):
+    """
+    Extracts optional default values for parameter expressions declared in
+    dataset.expressions entries like p_Entity / p_Environment.
+    """
+    defaults = {}
+    default_meta_pattern = re.compile(r'DefaultValue\s*=\s*"([^"]*)"', re.IGNORECASE)
+    literal_prefix_pattern = re.compile(r'^\s*"([^"]*)"\s*meta\b', re.IGNORECASE)
+
+    for expr in safe_list(dataset.get("expressions")):
+        name = str(expr.get("name") or "").strip().lower()
+        if not name.startswith("p_"):
+            continue
+
+        raw = str(expr.get("expression") or "")
+        default_val = None
+
+        meta_match = default_meta_pattern.search(raw)
+        if meta_match:
+            default_val = meta_match.group(1)
+        else:
+            literal_match = literal_prefix_pattern.search(raw)
+            if literal_match:
+                default_val = literal_match.group(1)
+
+        defaults[name] = default_val
+
+    return defaults
+
+
+def print_runtime_variable_summary(dataset, runtime_variables):
+    used_vars = extract_powerbi_runtime_variables(dataset)
+    param_defaults = extract_dataset_parameter_defaults(dataset)
+    supplied_vars = set(runtime_variables.keys())
+
+    missing = sorted(v for v in used_vars.keys() if v not in supplied_vars)
+    supplied_sorted = sorted(supplied_vars)
+
+    print("\nRuntime variable audit:")
+    print(f"   Variables used in dataset expressions: {len(used_vars)}")
+    print(f"   Variables supplied at runtime: {len(supplied_sorted)}")
+
+    if supplied_sorted:
+        print("   Supplied: " + ", ".join(supplied_sorted))
+
+    if missing:
+        print(f"   Missing ({len(missing)}):")
+        for var_name in missing:
+            default_val = param_defaults.get(var_name)
+            contexts = sorted(used_vars.get(var_name, set()))
+            context_preview = ", ".join(contexts[:3])
+            if len(contexts) > 3:
+                context_preview += f", +{len(contexts) - 3} more"
+
+            default_suffix = f" | default={default_val}" if default_val is not None else " | default=<none>"
+            print(f"      - {var_name}{default_suffix} | used_in={context_preview}")
+    else:
+        print("   Missing (0): none")
 
 
 # =============================================================================
@@ -323,14 +443,82 @@ def infer_source_objects_from_expression(expression):
     if not expression:
         return []
 
+    def _normalize_m_identifier(token):
+        raw = str(token or "").strip()
+        if raw.startswith('#"') and raw.endswith('"') and len(raw) >= 4:
+            return raw[2:-1]
+        return raw
+
+    def _strip_wrapping_parentheses(text):
+        val = str(text or "").strip()
+        while val.startswith("(") and val.endswith(")") and len(val) >= 2:
+            val = val[1:-1].strip()
+        return val
+
+    def _eval_m_concat(expr, bindings):
+        val = _strip_wrapping_parentheses(str(expr or "").strip().rstrip(","))
+        if not val:
+            return None
+
+        lower_prefix = "text.lower("
+        if val.lower().startswith(lower_prefix) and val.endswith(")"):
+            inner = _eval_m_concat(val[len(lower_prefix):-1], bindings)
+            return inner.lower() if inner is not None else None
+
+        parts = [p.strip() for p in val.split("&")]
+        if len(parts) == 1:
+            token = parts[0]
+            if token.startswith('"') and token.endswith('"') and len(token) >= 2:
+                return token[1:-1]
+            ref = _normalize_m_identifier(token).lower()
+            if ref in bindings:
+                return str(bindings[ref])
+            return None
+
+        out = []
+        for part in parts:
+            piece = _eval_m_concat(part, bindings)
+            if piece is None:
+                # Keep lineage inference resilient when some variables are unresolved.
+                piece = ""
+            out.append(piece)
+        return "".join(out)
+
+    def _extract_m_bindings(text):
+        bindings = {}
+        for raw_line in str(text or "").splitlines():
+            line = raw_line.strip()
+            if not line or line.lower() in {"let", "in"} or "=" not in line:
+                continue
+
+            left, right = line.split("=", 1)
+            key = _normalize_m_identifier(left.strip().strip(",")).lower()
+            if not key:
+                continue
+
+            evaluated = _eval_m_concat(right.strip(), bindings)
+            if evaluated is not None:
+                bindings[key] = evaluated
+        return bindings
+
+    bindings = _extract_m_bindings(expression)
     objects = []
     # 1. Schema="..." and Item="..."
     for schema, item in SCHEMA_ITEM_PATTERN.findall(expression):
         objects.append({"object_name": f"{schema}.{item}", "object_type": "table_or_view"})
 
+    # 1b. Schema=<variable> paired with [Name="..."] (e.g., Schema=Source_Object)
+    schema_values = []
+    for schema_ref in SCHEMA_REF_PATTERN.findall(expression):
+        resolved_schema = bindings.get(schema_ref.lower())
+        if resolved_schema:
+            schema_values.append(resolved_schema)
+
     # 2. [Name="..."]
     for name in NAME_MATCH_PATTERN.findall(expression):
         objects.append({"object_name": name, "object_type": "table_or_view"})
+        for schema_val in schema_values:
+            objects.append({"object_name": f"{schema_val}.{name}", "object_type": "table_or_view"})
 
     # 3. from <table_name>
     for tbl in FROM_MATCH_PATTERN.findall(expression):
@@ -349,6 +537,10 @@ def extract_table_source_objects(table):
     objects = []
     for source_entry in safe_list(table.get("source")):
         objects.extend(infer_source_objects_from_expression(source_entry.get("expression")))
+
+    # Prefer schema-qualified object names over bare table/view names.
+    objects.sort(key=lambda o: 0 if "." in str(o.get("object_name") or "") else 1)
+
     if not objects:
         objects.append({"object_name": "unknown_source_object", "object_type": "unknown"})
     return objects
@@ -533,7 +725,7 @@ def map_dataset_sources(dataset, source_lookup):
 # 8. Single-Pass Canonical Lineage Generator
 # =============================================================================
 
-def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=None):
+def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=None, runtime_variables=None):
     """
     Constructs the standardized lineage payload containing:
       - 'nodes': Dataset tables and Power BI report visual entities
@@ -549,8 +741,15 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
     dataset_sources = map_dataset_sources(dataset, source_lookup)
     primary_source = dataset_sources[0] if dataset_sources else {"type": "unknown", "connection_details": {}}
 
-    source_nodes_map = {}
-    dataset_nodes = []
+    # If provided or defaulted in Power BI parameters, prefer p_server for Teradata host naming.
+    dataset_param_defaults = extract_dataset_parameter_defaults(dataset)
+    effective_server = (runtime_variables or {}).get("p_server") or dataset_param_defaults.get("p_server")
+    if effective_server:
+        updated_conn = dict(primary_source.get("connection_details") or {})
+        updated_conn["server"] = effective_server
+        primary_source = {**primary_source, "connection_details": updated_conn}
+
+    nodes = []
     edges = []
     seen_edges = set()
 
@@ -560,13 +759,12 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         if not table_name:
             continue
 
-        table_urn = build_fabric_table_urn(workspace_name, dataset_name, table_name)
         model_columns = extract_model_columns(raw_table)
         transformations = extract_table_transformations(raw_table)
         step_lookup = {t["step_name"]: t for t in transformations}
         col_lineage = build_column_lineage_for_table(model_columns, transformations)
         source_objects = extract_table_source_objects(raw_table)
-        primary_source_obj = source_objects[-1]["object_name"] if source_objects else table_name
+        primary_source_obj = source_objects[0]["object_name"] if source_objects else table_name
 
         table_cols = []
         for col in model_columns:
@@ -575,9 +773,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
                 continue
 
             expr = col.get("expression")
-            c_urn = build_fabric_column_urn(workspace_name, dataset_name, table_name, c_name)
             col_payload = {
-                "id": c_urn,
                 "name": c_name,
                 "dataType": col.get("data_type") or "String",
             }
@@ -590,8 +786,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
 
             table_cols.append(col_payload)
 
-        dataset_nodes.append({
-            "id": table_urn,
+        nodes.append({
             "name": table_name,
             "container": normalize_urn_segment(dataset_name),
             "schema_name": "Model",
@@ -599,7 +794,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
             "columns": table_cols,
         })
 
-        # 2. Build Ingest Edges from Source Objects & Record Upstream Source Nodes
+        # 2. Build Ingest Edges from Source Objects
         for mapping in col_lineage:
             src_col = mapping.get("source_column")
             tgt_col = mapping.get("model_column")
@@ -609,31 +804,6 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
             if src_col and tgt_col:
                 src_urn = build_source_column_urn(primary_source, primary_source_obj, src_col)
                 tgt_urn = build_fabric_column_urn(workspace_name, dataset_name, table_name, tgt_col)
-                src_node_urn = build_source_object_urn(primary_source, primary_source_obj)
-
-                # Register upstream source node and column so React Flow can render the edges
-                if src_node_urn not in source_nodes_map:
-                    s_schema, s_table = split_source_object_name(primary_source_obj)
-                    if not s_schema and len(source_objects) >= 2:
-                        s_schema = source_objects[-2]["object_name"]
-                    conn = primary_source.get("connection_details") or {}
-                    def_container = normalize_container_segment(conn.get("database") or conn.get("schema"), fallback="unknown_container")
-                    s_container = normalize_container_segment(s_schema, fallback=def_container)
-                    source_nodes_map[src_node_urn] = {
-                        "id": src_node_urn,
-                        "name": s_table or primary_source_obj,
-                        "container": s_container,
-                        "schema_name": s_schema or "dbo",
-                        "type": "source_table",
-                        "columns": {}
-                    }
-                if src_col not in source_nodes_map[src_node_urn]["columns"]:
-                    source_nodes_map[src_node_urn]["columns"][src_col] = {
-                        "id": src_urn,
-                        "name": src_col,
-                        "dataType": "String"
-                    }
-
                 edge_key = (src_urn, tgt_urn)
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
@@ -667,19 +837,6 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
                         "expression": expr
                     })
 
-    # Assemble nodes: upstream sources first, then dataset tables
-    nodes = []
-    for s_node in source_nodes_map.values():
-        nodes.append({
-            "id": s_node["id"],
-            "name": s_node["name"],
-            "container": s_node["container"],
-            "schema_name": s_node["schema_name"],
-            "type": s_node["type"],
-            "columns": list(s_node["columns"].values())
-        })
-    nodes.extend(dataset_nodes)
-
     # 4. Process Power BI Report Entity Node
     reports = []
     report_links = []
@@ -693,7 +850,6 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         # Build report visual columns bound to dataset tables
         report_cols = [
             {
-                "id": f"{report_urn}#report_view",
                 "name": "Report_View",
                 "dataType": "Visual",
                 "isCalculated": False,
@@ -703,7 +859,6 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         ]
 
         report_node = {
-            "id": report_urn,
             "name": report_name,
             "container": normalize_urn_segment(workspace_name),
             "schema_name": "Visual",
@@ -713,8 +868,8 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
         nodes.append(report_node)
 
         # Bridge edge from first dataset table column into report visual
-        if dataset_nodes and dataset_nodes[0].get("columns"):
-            first_table = dataset_nodes[0]
+        if nodes and nodes[0].get("columns"):
+            first_table = nodes[0]
             first_col = first_table["columns"][0]["name"]
             src_col_urn = build_fabric_column_urn(workspace_name, dataset_name, first_table["name"], first_col)
             tgt_rep_urn = f"{report_urn}#report_view"
@@ -741,7 +896,7 @@ def build_canonical_fabric_payload(workspace_obj, dataset, report, scan_result=N
             "relationship": "consumes_dataset",
         })
 
-    nodes.sort(key=lambda n: (0 if n.get("type") == "source_table" else (1 if n.get("type") == "dataset_table" else 2), normalize_urn_segment(n.get("name"))))
+    nodes.sort(key=lambda n: normalize_urn_segment(n.get("name")))
     edges.sort(key=lambda e: (e.get("sourceColumnId", ""), e.get("targetColumnId", "")))
 
     return {
@@ -793,17 +948,16 @@ def validate_canonical_payload(payload):
         if not isinstance(name, str) or not name.strip():
             errors.append(f"Node #{idx} has invalid 'name'.")
             continue
-        node_key = node.get("id") or (node_type, name)
-        if node_key in node_names:
-            errors.append(f"Duplicate node '{name}'.")
-        node_names.add(node_key)
+        if name in node_names:
+            errors.append(f"Duplicate node name '{name}'.")
+        node_names.add(name)
 
         if not isinstance(container, str) or not container.strip():
             errors.append(f"Node '{name}' has invalid 'container'.")
         if not isinstance(schema_name, str) or not schema_name.strip():
             errors.append(f"Node '{name}' has invalid 'schema_name'.")
-        if node_type not in ("dataset_table", "report", "source_table", "source_view"):
-            errors.append(f"Node '{name}' must have type 'dataset_table', 'report', 'source_table', or 'source_view'.")
+        if node_type not in ("dataset_table", "report"):
+            errors.append(f"Node '{name}' must have type 'dataset_table' or 'report'.")
 
         if not isinstance(columns, list):
             errors.append(f"Node '{name}' has invalid 'columns'.")
@@ -820,10 +974,8 @@ def validate_canonical_payload(payload):
 
             if node_type == "report":
                 fabric_column_ids.add(f"{build_fabric_report_urn(workspace, name)}#{normalize_urn_segment(c_name)}")
-            elif node_type == "dataset_table":
-                fabric_column_ids.add(build_fabric_column_urn(workspace, container, name, c_name))
             else:
-                fabric_column_ids.add(col.get("id") or f"{node.get('id')}#{normalize_urn_segment(c_name)}")
+                fabric_column_ids.add(build_fabric_column_urn(workspace, container, name, c_name))
 
             if col.get("isCalculated") and not col.get("expression"):
                 errors.append(f"Calculated column '{name}.{c_name}' is missing 'expression'.")
@@ -853,6 +1005,18 @@ def validate_canonical_payload(payload):
 # 10. CLI Argument Parsing & Main Entrypoint
 # =============================================================================
 
+def parse_bool_arg(value):
+    if isinstance(value, bool):
+        return value
+
+    lowered = str(value or "").strip().lower()
+    if lowered in {"1", "true", "yes", "y", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "n", "off"}:
+        return False
+
+    raise argparse.ArgumentTypeError("Expected a boolean value (true/false).")
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Extract and generate canonical Fabric/Power BI column lineage JSON."
@@ -861,6 +1025,20 @@ def parse_args():
     parser.add_argument("--report-id", required=True, help="Power BI report GUID")
     parser.add_argument("--report-name", required=True, help="Display name of the target report")
     parser.add_argument("--output", default="lineage_output.json", help="Path to write lineage JSON output")
+    parser.add_argument(
+        "--dump",
+        nargs="?",
+        const=True,
+        default=False,
+        type=parse_bool_arg,
+        metavar="true|false",
+        help="When true, also write the raw workspace scan API JSON.",
+    )
+    parser.add_argument(
+        "--dump-output",
+        default="raw_scan_output.json",
+        help="Path to write raw workspace scan API JSON when --dump is true.",
+    )
     parser.add_argument(
         "--var",
         action="append",
@@ -894,6 +1072,11 @@ def main():
         wait_for_scan_completion(token, proxies, scan_id)
         scan_result = get_scan_result(token, proxies, scan_id)
 
+        if args.dump:
+            with open(args.dump_output, "w", encoding="utf-8") as raw_out_f:
+                json.dump(scan_result, raw_out_f, indent=2)
+            print(f"Raw API scan JSON written to: {args.dump_output}")
+
         # 2. Locate Workspace, Report, and Dataset
         workspace_obj = find_workspace(scan_result, args.workspace_id)
         if not workspace_obj:
@@ -911,8 +1094,11 @@ def main():
         if not dataset:
             raise RuntimeError(f"Dataset '{dataset_id}' referenced by report was not found in scan results.")
 
+        print_runtime_variable_summary(dataset, runtime_variables)
+        effective_runtime_variables = merge_runtime_variables_with_dataset_defaults(runtime_variables, dataset)
+
         # 3. Apply Variable Substitutions & Validate Binding
-        dataset = apply_runtime_variables_to_dataset(dataset, runtime_variables)
+        dataset = apply_runtime_variables_to_dataset(dataset, effective_runtime_variables)
         verify_report_dataset_binding(token, proxies, args.workspace_id, report.get("id"), dataset_id)
 
         # 4. Generate Canonical Payload directly (1-pass)
@@ -921,6 +1107,7 @@ def main():
             dataset=dataset,
             report=report,
             scan_result=scan_result,
+            runtime_variables=effective_runtime_variables,
         )
 
         validation_errors = validate_canonical_payload(canonical_payload)
