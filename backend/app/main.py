@@ -9,11 +9,12 @@ from fastapi.staticfiles import StaticFiles
 from .models import (
     LineageGraphResponse, LineageDetailsResponse,
     TeradataIngestRequest, FabricIngestRequest, IngestResponse,
-    LineageExportResponse
+    LineageExportResponse, ImpactAnalysisResponse
 )
 from .parser import get_lineage_graph_from_db, get_column_details_from_db, export_lineage_from_db
 from .ingestion import ingest_teradata_lineage, ingest_fabric_lineage
-from .db import DB_PATH, clear_db
+from .impact import calculate_column_impact
+from .db import DB_PATH, clear_db, prune_orphaned_edges
 from .seed_data import seed_lineage_database
 
 # Automatically initialize & seed database if not present
@@ -108,6 +109,76 @@ def export_lineage(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export lineage: {str(e)}")
+
+# =============================================================================
+# Column Impact Analysis Endpoints
+# =============================================================================
+
+@app.get("/api/impact-analysis", response_model=ImpactAnalysisResponse)
+def get_impact_analysis(
+    columnId: str = Query(..., description="Target Column URN to analyze"),
+    action: str = Query("delete", description="Simulated action: delete, update, add")
+):
+    """
+    Simulates the blast-radius impact of modifying (delete, update, add) a column
+    across all downstream models, measures, calculations, and report visuals.
+    """
+    try:
+        return calculate_column_impact(columnId, action=action)
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/impact-analysis/csv")
+def export_impact_analysis_csv(
+    columnId: str = Query(..., description="Target Column URN to analyze"),
+    action: str = Query("delete", description="Simulated action: delete, update, add")
+):
+    """
+    Downloads an enterprise-ready CSV impact report for change management & audit.
+    """
+    try:
+        import io, csv
+        result = calculate_column_impact(columnId, action=action)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["=== LINEAGE COLUMN IMPACT ANALYSIS REPORT ==="])
+        writer.writerow(["Target Column", result.target.columnName])
+        writer.writerow(["Target Table/View", result.target.nodeName])
+        writer.writerow(["Target Container", result.target.container])
+        writer.writerow(["Simulated Action", result.action.upper()])
+        writer.writerow(["Overall Risk Level", result.summary.riskLevel])
+        writer.writerow(["Risk Reason", result.summary.riskReason])
+        writer.writerow(["Total Impacted Objects", result.summary.totalImpactedObjects])
+        writer.writerow(["Impacted Reports", result.summary.impactedReportsCount])
+        writer.writerow(["Impacted Models", result.summary.impactedModelsCount])
+        writer.writerow(["Impacted Measures/Formulas", result.summary.impactedMeasuresCount])
+        writer.writerow([])
+        writer.writerow(["Impacted Object Name", "Container", "Type", "Column/Measure", "Distance", "Relationship", "Severity", "Impact Description", "Affected Expression"])
+        for obj in result.impactedObjects:
+            writer.writerow([
+                obj.nodeName,
+                obj.container,
+                obj.nodeType,
+                obj.columnName,
+                obj.distance,
+                obj.relationship,
+                obj.severity,
+                obj.impactDescription,
+                obj.affectedExpression or ""
+            ])
+        now_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"impact_analysis_{result.target.columnName}_{action}_{now_str}.csv"
+        return Response(
+            content=output.getvalue().encode("utf-8"),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
 # Ingestion Endpoints (Teradata SQL Scanner & Azure Fabric / Power BI Scanner)

@@ -140,3 +140,50 @@ class LineageExportResponse(BaseModel):
     nodes: List[EntityNode]
     columnEdges: List[ColumnEdge]
 
+# =============================================================================
+# Impact Analysis API Schemas
+# =============================================================================
+
+class ImpactedObject(BaseModel):
+    nodeId: str
+    nodeName: str
+    nodeType: str            # source_table, dataset_table, report, etc.
+    container: str           # database or workspace
+    system: Optional[str] = None
+    columnId: str
+    columnName: str
+    dataType: str
+    distance: int            # 1 = direct downstream, 2+ = transitive
+    relationship: str        # "direct" | "transitive"
+    severity: str            # "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+    action: str              # "delete" | "update" | "add"
+    impactDescription: str
+    affectedExpression: Optional[str] = None
+
+class TargetColumnInfo(BaseModel):
+    nodeId: str
+    nodeName: str
+    nodeType: str
+    container: str
+    system: Optional[str] = None
+    columnId: str
+    columnName: str
+    dataType: str
+    expression: Optional[str] = None
+
+class ImpactAnalysisSummary(BaseModel):
+    totalImpactedObjects: int
+    totalImpactedNodes: int
+    impactedReportsCount: int
+    impactedModelsCount: int
+    impactedMeasuresCount: int
+    riskLevel: str           # "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+    riskReason: str
+
+class ImpactAnalysisResponse(BaseModel):
+    target: TargetColumnInfo
+    action: str              # "delete" | "update" | "add"
+    summary: ImpactAnalysisSummary
+    impactedObjects: List[ImpactedObject]
+    downstreamPaths: List[List[PathNode]] = []
+

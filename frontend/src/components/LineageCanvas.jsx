@@ -61,7 +61,8 @@ function CanvasInner({
   rawColumnEdges = [],
   selectedColumnId,
   focusNodeId,
-  onSelectColumn
+  onSelectColumn,
+  theme = 'dark'
 }) {
   const { fitView } = useReactFlow();
 
@@ -152,10 +153,17 @@ function CanvasInner({
     return { validNodeIds: nodeIds, colLookup: lookup };
   }, [rawNodes]);
 
-  // Filter edges so Dagre and React Flow never encounter edges to non-existent nodes
+  // Filter edges so Dagre and React Flow NEVER encounter edges to non-existent nodes or column handles (Zero edges to nowhere)
   const validColumnEdges = useMemo(() => {
-    return rawColumnEdges.filter(e => validNodeIds.has(e.sourceNodeId) && validNodeIds.has(e.targetNodeId));
-  }, [rawColumnEdges, validNodeIds]);
+    return rawColumnEdges.filter(e => 
+      validNodeIds.has(e.sourceNodeId) && 
+      validNodeIds.has(e.targetNodeId) &&
+      colLookup.has(e.sourceColumnId) &&
+      colLookup.has(e.targetColumnId)
+    );
+  }, [rawColumnEdges, validNodeIds, colLookup]);
+
+  const isDark = theme === 'dark';
 
   // Convert raw API nodes & edges into React Flow format
   const initialNodes = useMemo(() => {
@@ -175,6 +183,7 @@ function CanvasInner({
           isFocused,
           isHighlighted,
           isDimmed,
+          theme,
         },
         position: { x: 0, y: 0 },
       };
@@ -195,20 +204,20 @@ function CanvasInner({
         animated: isAct,
         className: selectedColumnId ? (isAct ? 'highlighted' : 'dimmed') : '',
         style: {
-          stroke: isAct ? '#818cf8' : '#334155',
+          stroke: isAct ? (isDark ? '#818cf8' : '#4f46e5') : (isDark ? '#334155' : '#cbd5e1'),
           strokeWidth: isAct ? 3 : 1.5,
         },
       };
     });
 
     return getLayoutedElements(formatted, formattedEdges).nodes;
-  }, [rawNodes, validColumnEdges, selectedColumnId, focusNodeId, onSelectColumn, activeNodeIds, activeColumnIds, activeEdgeIds, colLookup]);
+  }, [rawNodes, validColumnEdges, selectedColumnId, focusNodeId, onSelectColumn, activeNodeIds, activeColumnIds, activeEdgeIds, colLookup, theme, isDark]);
 
   const initialEdges = useMemo(() => {
     const formatted = rawNodes.map((n) => ({
       id: n.id,
       type: 'tableNode',
-      data: { ...n },
+      data: { ...n, theme },
       position: { x: 0, y: 0 },
     }));
 
@@ -227,14 +236,14 @@ function CanvasInner({
         animated: isAct,
         className: selectedColumnId ? (isAct ? 'highlighted' : 'dimmed') : '',
         style: {
-          stroke: isAct ? '#818cf8' : '#334155',
+          stroke: isAct ? (isDark ? '#818cf8' : '#4f46e5') : (isDark ? '#334155' : '#cbd5e1'),
           strokeWidth: isAct ? 3 : 1.5,
         },
       };
     });
 
     return getLayoutedElements(formatted, formattedEdges).edges;
-  }, [rawNodes, validColumnEdges, selectedColumnId, activeEdgeIds, colLookup]);
+  }, [rawNodes, validColumnEdges, selectedColumnId, activeEdgeIds, colLookup, theme, isDark]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -258,16 +267,22 @@ function CanvasInner({
   }, [focusNodeId, fitView]);
 
   return (
-    <div className="w-full h-full relative bg-slate-950">
+    <div className={`w-full h-full relative transition-colors ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
       {rawNodes.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 p-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-8 max-w-md text-center shadow-2xl backdrop-blur-md">
-            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-4">
+          <div className={`rounded-2xl p-8 max-w-md text-center shadow-2xl backdrop-blur-md border ${
+            isDark ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/95 border-slate-200 text-slate-800 shadow-xl'
+          }`}>
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mx-auto mb-4">
               <Database className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-slate-100 mb-1.5">Database is Empty</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              No lineage nodes or edges are currently loaded. Use <code className="px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono text-[11px]">load_lineage.py</code> or the ingestion API to load your metadata graph.
+            <h3 className={`text-base font-bold mb-1.5 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+              Database is Empty
+            </h3>
+            <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              No lineage nodes or edges are currently loaded. Use <code className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${
+                isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-700'
+              }`}>load_lineage.py</code> or the ingestion API to load your metadata graph.
             </p>
           </div>
         </div>
@@ -285,16 +300,25 @@ function CanvasInner({
         defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#1e293b" />
-        <Controls position="bottom-right" />
+        <Background 
+          variant={BackgroundVariant.Dots} 
+          gap={24} 
+          size={1.5} 
+          color={isDark ? '#1e293b' : '#cbd5e1'} 
+        />
+        <Controls position="bottom-right" className={isDark ? '' : '!bg-white/90 !border-slate-300 !shadow-md'} />
 
         {/* Eagle View (MiniMap) Badge & Interactive Viewfinder */}
         {rawNodes.length > 0 && (
           <>
-            <div className="absolute bottom-[170px] left-6 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-800 text-[11px] font-semibold text-slate-300 shadow-lg pointer-events-none">
-              <Compass className="w-3.5 h-3.5 text-indigo-400" />
+            <div className={`absolute bottom-[170px] left-6 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold shadow-lg pointer-events-none ${
+              isDark 
+                ? 'bg-slate-900/90 border-slate-800 text-slate-300' 
+                : 'bg-white/90 border-slate-300 text-slate-700 shadow-md'
+            }`}>
+              <Compass className="w-3.5 h-3.5 text-indigo-500" />
               <span>Eagle View Navigator</span>
-              <span className="text-[10px] text-slate-500 font-normal">(Drag or click to move)</span>
+              <span className={`text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>(Drag or click to move)</span>
             </div>
 
             <MiniMap 
@@ -307,13 +331,17 @@ function CanvasInner({
                   default: return '#64748b';
                 }
               }}
-              maskColor="rgba(15, 23, 42, 0.75)"
+              maskColor={isDark ? "rgba(15, 23, 42, 0.75)" : "rgba(241, 245, 249, 0.75)"}
               position="bottom-left"
               pannable={true}
               zoomable={true}
               nodeStrokeWidth={3}
               nodeBorderRadius={4}
-              className="!w-64 !h-36 !rounded-xl !border !border-slate-800/90 !shadow-2xl !bg-slate-950/90 backdrop-blur-md cursor-grab active:cursor-grabbing hover:!border-indigo-500/50 transition-all"
+              className={`!w-64 !h-36 !rounded-xl !border !shadow-2xl backdrop-blur-md cursor-grab active:cursor-grabbing transition-all ${
+                isDark 
+                  ? '!border-slate-800/90 !bg-slate-950/90 hover:!border-indigo-500/50' 
+                  : '!border-slate-300 !bg-white/90 hover:!border-indigo-400 shadow-lg'
+              }`}
             />
           </>
         )}

@@ -77,6 +77,29 @@ def clear_db(db_path: str = DB_PATH):
         except Exception:
             pass
 
+def prune_orphaned_edges(db_path: str = DB_PATH) -> int:
+    """
+    Prunes any edges in SQLite where source or target node or column does not exist.
+    Guarantees 100% referential integrity and no dangling edges.
+    """
+    init_db(db_path)
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            DELETE FROM column_edges
+            WHERE id NOT IN (
+                SELECT e.id
+                FROM column_edges e
+                JOIN nodes sn ON e.source_node_id = sn.id
+                JOIN nodes tn ON e.target_node_id = tn.id
+                JOIN columns sc ON e.source_column_id = sc.id AND sc.node_id = sn.id
+                JOIN columns tc ON e.target_column_id = tc.id AND tc.node_id = tn.id
+            );
+        """)
+        pruned = cursor.rowcount
+        conn.commit()
+        return pruned
+
 @contextmanager
 def get_db(db_path: str = DB_PATH):
     conn = sqlite3.connect(db_path)

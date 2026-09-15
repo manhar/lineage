@@ -14,9 +14,13 @@ def get_lineage_graph_from_db(db_path: str = DB_PATH) -> LineageGraphResponse:
 
         # 1. Fetch count of incoming sources for each column to mark multi-source derivations
         cursor.execute("""
-            SELECT target_column_id, COUNT(*) as cnt 
-            FROM column_edges 
-            GROUP BY target_column_id
+            SELECT e.target_column_id, COUNT(*) as cnt 
+            FROM column_edges e
+            JOIN nodes sn ON e.source_node_id = sn.id
+            JOIN nodes tn ON e.target_node_id = tn.id
+            JOIN columns sc ON e.source_column_id = sc.id AND sc.node_id = sn.id
+            JOIN columns tc ON e.target_column_id = tc.id AND tc.node_id = tn.id
+            GROUP BY e.target_column_id;
         """)
         incoming_counts = {row["target_column_id"]: row["cnt"] for row in cursor.fetchall()}
 
@@ -61,11 +65,15 @@ def get_lineage_graph_from_db(db_path: str = DB_PATH) -> LineageGraphResponse:
                 columns=node_cols_map.get(n["id"], [])
             ))
 
-        # 4. Fetch column edges
+        # 4. Fetch column edges with strict referential integrity (zero edges leading to nowhere)
         cursor.execute("""
-            SELECT id, source_node_id, source_column_id, target_node_id, target_column_id, 
-                   transformation_type, expression, scanner_source 
-            FROM column_edges;
+            SELECT e.id, e.source_node_id, e.source_column_id, e.target_node_id, e.target_column_id, 
+                   e.transformation_type, e.expression, e.scanner_source 
+            FROM column_edges e
+            JOIN nodes sn ON e.source_node_id = sn.id
+            JOIN nodes tn ON e.target_node_id = tn.id
+            JOIN columns sc ON e.source_column_id = sc.id AND sc.node_id = sn.id
+            JOIN columns tc ON e.target_column_id = tc.id AND tc.node_id = tn.id;
         """)
         edge_rows = cursor.fetchall()
 
