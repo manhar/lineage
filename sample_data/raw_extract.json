@@ -1,0 +1,160 @@
+{
+  "workspaces": [
+    {
+      "id": "UUID_MASKED",
+      "name": "IBFS dza_m_finance [PROD]",
+      "type": "Workspace",
+      "state": "Active",
+      "isOnDedicatedCapacity": true,
+      "capacityId": "UUID_MASKED",
+      "defaultDatasetStorageFormat": "Small",
+      "reports": [
+        {
+          "reportType": "PowerBIReport",
+          "format": "PBIR",
+          "id": "UUID_MASKED",
+          "name": "ProfitabilityFR",
+          "datasetId": "xxxxxxxxxx_85f899d092",
+          "createdDateTime": "2024-11-13T10:19:41.323",
+          "modifiedDateTime": "2026-06-12T12:14:54.04",
+          "modifiedBy": "masked.user@example.com",
+          "createdBy": "masked.user@example.com",
+          "modifiedById": "UUID_MASKED",
+          "createdById": "UUID_MASKED",
+          "sensitivityLabel": {
+            "labelId": "xxxxxxxxxx_49b4fbd3b6"
+          }
+        }
+      ],
+      "dashboards": [],
+      "datasets": [
+        {
+          "id": "UUID_MASKED",
+          "name": "ProfitabilityFR",
+          "tables": [
+            {
+              "name": "Date",
+              "isHidden": true,
+              "storageMode": "Import",
+              "columns": [
+                {
+                  "name": "Date d'Arrêté",
+                  "dataType": "DateTime",
+                  "isHidden": true,
+                  "columnType": "Data"
+                },
+                {
+                  "name": "Date",
+                  "dataType": "String",
+                  "isHidden": true,
+                  "columnType": "Data"
+                },
+                {
+                  "name": "Date Time Valid",
+                  "dataType": "String",
+                  "isHidden": true,
+                  "columnType": "Data"
+                }
+              ],
+              "measures": [],
+              "source": [
+                {
+                  "expression": "let\n    Source = masked.host.local(p_Server, [HierarchicalNavigation=true]),\n    Source_Object = masked.host.local(\"ibfs_\" & p_Entity & \"_rep_profit\" & p_Environment),\n    Database ... [TRIMMED len=267] ... }, {\"Prompt_Date_Valid\", \"Date\"}})\nin\n    #\"Renamed Columns\""
+                }
+              ]
+            }
+          ],
+          "expressions": [
+            {
+              "name": "p_Server",
+              "expression": "\"masked.host.local\" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = \"Text\", List = {\"masked.host.local\", \"masked.host.local\"}, DefaultValue = \"masked.host.local\"]"
+            },
+            {
+              "name": "p_Entity",
+              "expression": "\"DZA\" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = \"Text\"]"
+            },
+            {
+              "name": "p_Language",
+              "expression": "\"FR\" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = \"Text\"]"
+            },
+            {
+              "name": "p_RETHA_DB",
+              "expression": "\"M_PROFIT\" meta [IsParameterQuery = true, IsParameterQueryRequired = false, Type = \"Text\"]"
+            },
+            {
+              "name": "p_RETHA_FREQUENCY",
+              "expression": "\"DD\" meta [IsParameterQuery = true, IsParameterQueryRequired = false, Type = \"Text\"]"
+            },
+            {
+              "name": "p_Environment",
+              "expression": "\"_vm\" meta [IsParameterQuery = true, IsParameterQueryRequired = false, Type = \"Text\"]"
+            },
+            {
+              "name": "p_Report_Name",
+              "expression": "\"ProfitabilityFR\" meta [IsParameterQuery = true, IsParameterQueryRequired = false, Type = \"Text\"]"
+            },
+            {
+              "name": "p_Workspace_Name",
+              "expression": "\"m_finance\" meta [IsParameterQuery = true, IsParameterQueryRequired = false, Type = \"Text\"]"
+            },
+            {
+              "name": "f_DateTimeToDate",
+              "expression": "let\n    Source = (x as datetime) => masked.host.local(x)\nin\n    Source"
+            }
+          ],
+          "roles": [
+            {
+              "name": "RLS_Role",
+              "modelPermission": "Read",
+              "members": [
+                {
+                  "memberName": "xxxxxxxxxx_d6f0ad6d47",
+                  "memberId": "xxxxxxxxxx_169f017d2f",
+                  "memberType": "Group",
+                  "identityProvider": "xxxxxxxxxx_89b0267b18"
+                }
+              ]
+            }
+          ],
+          "configuredBy": "xxxxxxxxxx_75ae0c36b1",
+          "configuredById": "xxxxxxxxxx_5c2ffb97c0",
+          "isEffectiveIdentityRequired": true,
+          "isEffectiveIdentityRolesRequired": true,
+          "targetStorageMode": "Abf",
+          "createdDate": "2024-11-13T10:19:29.683",
+          "contentProviderType": "PbixInImportMode",
+          "sensitivityLabel": {
+            "labelId": "xxxxxxxxxx_49b4fbd3b6"
+          },
+          "upstreamDataflows": [
+            {
+              "targetDataflowId": "UUID_MASKED",
+              "groupId": "xxxxxxxxxx_f3e818d1e3"
+            },
+            {
+              "targetDataflowId": "UUID_MASKED",
+              "groupId": "xxxxxxxxxx_f3e818d1e3"
+            }
+          ],
+          "datasourceUsages": [
+            {
+              "datasourceInstanceId": "xxxxxxxxxx_9c15dc2d33"
+            }
+          ]
+        }
+      ],
+      "dataflows": [],
+      "datamarts": []
+    }
+  ],
+  "datasourceInstances": [
+    {
+      "datasourceType": "xxxxxxxxxx_724f6b5c01",
+      "connectionDetails": {
+        "server": "xxxxxxxxxx_94d9c0d147"
+      },
+      "datasourceId": "xxxxxxxxxx_9c15dc2d33",
+      "gatewayId": "UUID_MASKED"
+    }
+  ]
+}
